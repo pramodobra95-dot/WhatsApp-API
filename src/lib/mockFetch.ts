@@ -143,22 +143,37 @@ export function handleMockFetch(url: string, init?: RequestInit): Response {
     const tenants = getDBItem<Tenant[]>("tenants", INITIAL_TENANTS);
     const body = JSON.parse(init?.body as string || "{}");
     const newTenant: Tenant = {
-      id: `tenant-${Math.random().toString(36).substr(2, 9)}`,
+      id: `tenant-${(body.name || "").toLowerCase().replace(/[^a-z0-9]/g, "-") || Math.random().toString(36).substr(2, 9)}`,
       name: body.name || "Unnamed Tenant",
       domain: body.domain || "tenant.domain.com",
-      plan: body.plan || "pro",
+      plan: body.plan || "growth",
       status: "active",
       createdAt: new Date().toISOString().split("T")[0],
-      whatsappLimit: 50000,
-      aiCredits: 1000,
+      whatsappLimit: body.whatsappLimit ? parseInt(body.whatsappLimit) : 10000,
+      aiCredits: body.aiCredits ? parseInt(body.aiCredits) : 1000,
       aiUsed: 0,
       phoneNumbersCount: 0,
-      maxUsersCount: 10,
-      internalChatEnabled: true,
-      allowedFeatures: ["live_inbox", "internal_chat", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing", "open_api"]
+      maxUsersCount: body.maxUsersCount ? parseInt(body.maxUsersCount) : (body.plan === "enterprise" ? 50 : body.plan === "pro" ? 15 : 5),
+      internalChatEnabled: body.internalChatEnabled !== undefined ? body.internalChatEnabled : true,
+      allowedFeatures: body.allowedFeatures || ["live_inbox", "internal_chat", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing", "open_api"]
     };
     tenants.push(newTenant);
     saveDBItem("tenants", tenants);
+
+    // Add audit log entry
+    const auditLogs = getDBItem<any[]>("audit_logs", []);
+    auditLogs.unshift({
+      id: `log-${Date.now()}`,
+      tenantId: newTenant.id,
+      userId: "super-admin-root",
+      userName: "Super Admin",
+      action: "WORKSPACE_CREATED",
+      details: `Provisioned new workspace '${newTenant.name}' with plan '${newTenant.plan}'`,
+      ipAddress: "127.0.0.1",
+      timestamp: new Date().toISOString()
+    });
+    saveDBItem("audit_logs", auditLogs);
+
     return jsonResponse(newTenant, 201);
   }
 
@@ -545,6 +560,89 @@ export function handleMockFetch(url: string, init?: RequestInit): Response {
     });
   }
 
+  // 27. GET /api/system/stats
+  if (path === "/api/system/stats" && method === "GET") {
+    const tenants = getDBItem<Tenant[]>("tenants", INITIAL_TENANTS);
+    const campaigns = getDBItem<Campaign[]>("campaigns", INITIAL_CAMPAIGNS);
+    const auditLogs = getDBItem<any[]>("audit_logs", []);
+    const phoneNumbers = getDBItem<WhatsAppPhoneNumber[]>("phone_numbers", INITIAL_PHONE_NUMBERS);
+    return jsonResponse({
+      totalTenants: tenants.length,
+      activeTenantsCount: tenants.filter(t => t.status === "active").length,
+      planDistribution: {
+        growth: tenants.filter(t => t.plan === "growth").length,
+        pro: tenants.filter(t => t.plan === "pro").length,
+        enterprise: tenants.filter(t => t.plan === "enterprise").length,
+      },
+      totalCampaigns: campaigns.length,
+      auditLogsCount: auditLogs.length,
+      whatsappNumbersCount: phoneNumbers.length
+    });
+  }
+
+  // 28. GET /api/admin/audit-logs
+  if (path === "/api/admin/audit-logs" && method === "GET") {
+    const auditLogs = getDBItem<any[]>("audit_logs", [
+      {
+        id: "log-initial-1",
+        tenantId: "tenant-alpha",
+        userId: "super-admin-root",
+        userName: "Super Admin",
+        action: "PLATFORM_INIT",
+        details: "BouuZ Multi-Tenant Sandbox successfully initialized.",
+        ipAddress: "127.0.0.1",
+        timestamp: new Date().toISOString()
+      }
+    ]);
+    return jsonResponse(auditLogs);
+  }
+
+  // 29. PATCH /api/admin/tenants/:id
+  const adminTenantPatchMatch = path.match(/\/api\/admin\/tenants\/([^/]+)$/);
+  if (adminTenantPatchMatch && method === "PATCH") {
+    const tenantId = adminTenantPatchMatch[1];
+    const tenants = getDBItem<Tenant[]>("tenants", INITIAL_TENANTS);
+    const tenantIndex = tenants.findIndex(t => t.id === tenantId);
+    if (tenantIndex === -1) {
+      return jsonResponse({ error: "Tenant not found" }, 404);
+    }
+    
+    const body = JSON.parse(init?.body as string || "{}");
+    const tenant = tenants[tenantIndex];
+    
+    if (body.status !== undefined) tenant.status = body.status;
+    if (body.plan !== undefined) {
+      tenant.plan = body.plan;
+      if (body.maxUsersCount === undefined) {
+        tenant.maxUsersCount = body.plan === "enterprise" ? 50 : body.plan === "pro" ? 15 : 5;
+      }
+    }
+    if (body.whatsappLimit !== undefined) tenant.whatsappLimit = body.whatsappLimit;
+    if (body.aiCredits !== undefined) tenant.aiCredits = body.aiCredits;
+    if (body.maxUsersCount !== undefined) tenant.maxUsersCount = parseInt(body.maxUsersCount);
+    if (body.internalChatEnabled !== undefined) tenant.internalChatEnabled = body.internalChatEnabled;
+    if (body.allowedFeatures !== undefined) tenant.allowedFeatures = body.allowedFeatures;
+    
+    tenants[tenantIndex] = tenant;
+    saveDBItem("tenants", tenants);
+
+    // Also add audit log entry for this update
+    const auditLogs = getDBItem<any[]>("audit_logs", []);
+    auditLogs.unshift({
+      id: `log-${Date.now()}`,
+      tenantId: tenant.id,
+      userId: "super-admin-root",
+      userName: "Super Admin",
+      action: "WORKSPACE_UPDATED",
+      details: `Updated configuration of workspace '${tenant.name}'`,
+      ipAddress: "127.0.0.1",
+      timestamp: new Date().toISOString()
+    });
+    saveDBItem("audit_logs", auditLogs);
+    
+    return jsonResponse(tenant);
+  }
+
   // Fallback 404 for unknown API
   return jsonResponse({ error: `Not found: ${method} ${path}` }, 404);
 }
@@ -565,9 +663,11 @@ export function applyMockFetchPatch(): void {
         // Attempt to call the real backend first
         const response = await originalFetch(input, init);
         
-        // If 404 on API, fallback to client mock database
-        if (response.status === 404) {
-          console.log(`[Proxy Intercept 404] Falling back to client-side database mock for ${urlString}`);
+        const contentType = response.headers.get("content-type") || "";
+        // If 404 on API, or if returning HTML (which means SPA router returned index.html fallback),
+        // fallback to client mock database
+        if (response.status === 404 || contentType.includes("text/html")) {
+          console.log(`[Proxy Intercept ${response.status} / HTML] Falling back to client-side database mock for ${urlString}`);
           return handleMockFetch(urlString, init);
         }
         
