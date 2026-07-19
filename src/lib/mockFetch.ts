@@ -656,6 +656,10 @@ export function applyMockFetchPatch(): void {
     
     // Only intercept requests destined for '/api/' endpoint
     if (urlString.includes("/api/")) {
+      const isVercel = window.location.hostname.endsWith(".vercel.app") || window.location.hostname.includes("vercel");
+      if (isVercel) {
+        return handleMockFetch(urlString, init);
+      }
       try {
         if (!originalFetch) {
           return handleMockFetch(urlString, init);
@@ -671,7 +675,15 @@ export function applyMockFetchPatch(): void {
           return handleMockFetch(urlString, init);
         }
         
-        return response;
+        // Secondary JSON-validity check
+        try {
+          const clone = response.clone();
+          await clone.json();
+          return response;
+        } catch (jsonErr) {
+          console.log(`[Proxy Intercept JSON Error] Response is not valid JSON, falling back to mock: ${urlString}`);
+          return handleMockFetch(urlString, init);
+        }
       } catch (err) {
         // If server is not running or network error occurs (like on Vercel)
         console.log(`[Proxy Intercept Network Error] Falling back to client-side database mock for ${urlString}`);

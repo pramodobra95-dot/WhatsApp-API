@@ -145,6 +145,24 @@ export default function App() {
     );
   }
 
+  const fallbackTenant: Tenant = {
+    id: "tenant-alpha",
+    name: "Alpha Logistics Inc",
+    domain: "alpha.logistics.com",
+    plan: "pro",
+    status: "active",
+    createdAt: "2026-01-10",
+    whatsappLimit: 100000,
+    aiCredits: 5000,
+    aiUsed: 1240,
+    phoneNumbersCount: 2,
+    maxUsersCount: 15,
+    internalChatEnabled: true,
+    allowedFeatures: ["live_inbox", "internal_chat", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing", "open_api"]
+  };
+
+  const currentTenant = activeTenant || tenants[0] || fallbackTenant;
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 font-sans relative">
       {/* Mobile sidebar overlay backdrop */}
@@ -162,8 +180,8 @@ export default function App() {
         ${isSidebarCollapsed ? "md:w-20" : "md:w-64"} w-64
       `}>
         <Sidebar
-          tenants={tenants}
-          selectedTenantId={activeTenant ? activeTenant.id : ""}
+          tenants={tenants.length > 0 ? tenants : [fallbackTenant]}
+          selectedTenantId={currentTenant.id}
           setSelectedTenantId={handleSelectTenant}
           userRole={activeRole}
           setUserRole={handleSetSimulatedRole}
@@ -205,68 +223,68 @@ export default function App() {
             {activeTab.replace(/_/g, " ")}
           </div>
         </header>
-        {activeTab === "dashboard" && activeTenant && (
-          <Dashboard tenantId={activeTenant.id} />
+        {activeTab === "dashboard" && currentTenant && (
+          <Dashboard tenantId={currentTenant.id} />
         )}
         
-        {activeTab === "live_inbox" && activeTenant && (
-          <LiveInbox tenantId={activeTenant.id} />
+        {activeTab === "live_inbox" && currentTenant && (
+          <LiveInbox tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "campaigns" && activeTenant && (
-          <Campaigns tenantId={activeTenant.id} />
+        {activeTab === "campaigns" && currentTenant && (
+          <Campaigns tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "templates" && activeTenant && (
-          <Templates tenantId={activeTenant.id} />
+        {activeTab === "templates" && currentTenant && (
+          <Templates tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "chatbot_builder" && activeTenant && (
-          <ChatbotBuilder tenantId={activeTenant.id} />
+        {activeTab === "chatbot_builder" && currentTenant && (
+          <ChatbotBuilder tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "crm" && activeTenant && (
-          <CRM tenantId={activeTenant.id} />
+        {activeTab === "crm" && currentTenant && (
+          <CRM tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "flows_automation" && activeTenant && (
-          <FlowsAndAutomation tenantId={activeTenant.id} />
+        {activeTab === "flows_automation" && currentTenant && (
+          <FlowsAndAutomation tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "message_router" && activeTenant && (
-          <MessageRouter tenantId={activeTenant.id} />
+        {activeTab === "message_router" && currentTenant && (
+          <MessageRouter tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "billing" && activeTenant && (
-          <Billing tenantId={activeTenant.id} />
+        {activeTab === "billing" && currentTenant && (
+          <Billing tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "open_api" && activeTenant && (
-          <OpenApiSettings tenantId={activeTenant.id} />
+        {activeTab === "open_api" && currentTenant && (
+          <OpenApiSettings tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "tenant_settings" && activeTenant && (
-          <TenantSettings tenantId={activeTenant.id} />
+        {activeTab === "tenant_settings" && currentTenant && (
+          <TenantSettings tenantId={currentTenant.id} />
         )}
 
-        {activeTab === "internal_chat" && activeTenant && (
+        {activeTab === "internal_chat" && currentTenant && (
           <InternalChat 
-            tenantId={activeTenant.id} 
+            tenantId={currentTenant.id} 
             currentUser={{
               id: currentUser.id,
               name: currentUser.name,
               email: currentUser.email,
               role: currentUser.role
             }}
-            internalChatEnabled={activeTenant.internalChatEnabled !== false}
+            internalChatEnabled={currentTenant.internalChatEnabled !== false}
           />
         )}
 
-        {activeTab === "staff_permissions" && activeTenant && (
+        {activeTab === "staff_permissions" && currentTenant && (
           <StaffPermissions 
-            tenantId={activeTenant.id} 
+            tenantId={currentTenant.id} 
             currentUserId={currentUser.id}
-            maxUsersCount={activeTenant.maxUsersCount}
+            maxUsersCount={currentTenant.maxUsersCount}
             onLoginAsUser={(user) => {
               setCurrentUser({
                 id: user.id,
