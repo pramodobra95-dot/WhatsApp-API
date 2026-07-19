@@ -8,26 +8,42 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import Sidebar from "./components/Sidebar";
-import Dashboard from "./components/Dashboard";
-import LiveInbox from "./components/LiveInbox";
-import Campaigns from "./components/Campaigns";
-import Templates from "./components/Templates";
-import ChatbotBuilder from "./components/ChatbotBuilder";
-import CRM from "./components/CRM";
-import FlowsAndAutomation from "./components/FlowsAndAutomation";
-import Billing from "./components/Billing";
-import MessageRouter from "./components/MessageRouter";
-import SuperAdmin from "./components/SuperAdmin";
-import StaffPermissions from "./components/StaffPermissions";
-import TenantSettings from "./components/TenantSettings";
-import InternalChat from "./components/InternalChat";
 import Login from "./components/Login";
-import OpenApiSettings from "./components/OpenApiSettings";
 import LandingPage from "./components/LandingPage";
 import { Tenant } from "./types";
 import { RefreshCw, Menu } from "lucide-react";
+
+// Lazy-loaded dashboard, automation flows, CRM, Campaigns, and chat widgets for code splitting
+const Dashboard = lazy(() => import("./components/Dashboard"));
+const LiveInbox = lazy(() => import("./components/LiveInbox"));
+const Campaigns = lazy(() => import("./components/Campaigns"));
+const Templates = lazy(() => import("./components/Templates"));
+const ChatbotBuilder = lazy(() => import("./components/ChatbotBuilder"));
+const CRM = lazy(() => import("./components/CRM"));
+const FlowsAndAutomation = lazy(() => import("./components/FlowsAndAutomation"));
+const Billing = lazy(() => import("./components/Billing"));
+const MessageRouter = lazy(() => import("./components/MessageRouter"));
+const SuperAdmin = lazy(() => import("./components/SuperAdmin"));
+const StaffPermissions = lazy(() => import("./components/StaffPermissions"));
+const TenantSettings = lazy(() => import("./components/TenantSettings"));
+const InternalChat = lazy(() => import("./components/InternalChat"));
+const OpenApiSettings = lazy(() => import("./components/OpenApiSettings"));
+
+function TabLoadingSpinner() {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-12 bg-slate-50/50 min-h-[400px]">
+      <div className="relative flex items-center justify-center">
+        <div className="absolute w-12 h-12 rounded-full border-4 border-blue-500/20 animate-ping"></div>
+        <div className="w-10 h-10 rounded-full border-4 border-t-blue-600 border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
+      </div>
+      <p className="text-[11px] text-slate-400 font-mono font-medium tracking-wider uppercase mt-4 animate-pulse">
+        Initializing Module...
+      </p>
+    </div>
+  );
+}
 
 export default function App() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -53,6 +69,47 @@ export default function App() {
   const [activeRole, setActiveRole] = useState<"super_admin" | "tenant_admin" | "manager" | "agent" | "viewer">("tenant_admin");
   const [activeTab, setActiveTab] = useState<string>("dashboard");
 
+  // Keep-alive routing: store all visited tabs so we only lazy-mount them and keep them alive in the DOM!
+  const [visitedTabs, setVisitedTabs] = useState<string[]>(["dashboard"]);
+
+  // Automatically track visited tabs to load them lazily and cache their viewport
+  useEffect(() => {
+    if (activeTab && !visitedTabs.includes(activeTab)) {
+      setVisitedTabs((prev) => [...prev, activeTab]);
+    }
+  }, [activeTab]);
+
+  // Expose the dynamic dashboard prefetching helper globally
+  useEffect(() => {
+    (window as any).__dashboardCache = (window as any).__dashboardCache || {};
+    
+    (window as any).prefetchDashboard = (tenantId: string) => {
+      if (!tenantId) return;
+      
+      const cache = (window as any).__dashboardCache;
+      const cached = cache[tenantId];
+      // If already fetched within 30 seconds, don't refetch
+      if (cached && Date.now() - cached.timestamp < 30000) {
+        return;
+      }
+      
+      // Mark as prefetching to prevent duplicate fetch calls
+      cache[tenantId] = { data: cached?.data || null, timestamp: Date.now() };
+      
+      fetch(`/api/tenants/${tenantId}/dashboard`)
+        .then((res) => res.json())
+        .then((data) => {
+          cache[tenantId] = { data, timestamp: Date.now() };
+          // Fire custom event to notify listeners (like Dashboard component if it is currently loading/mounted)
+          const event = new CustomEvent(`dashboard-prefetched-${tenantId}`, { detail: data });
+          window.dispatchEvent(event);
+        })
+        .catch((err) => {
+          console.error("Prefetching error:", err);
+        });
+    };
+  }, []);
+
   const fetchTenants = () => {
     setLoading(true);
     fetch("/api/admin/tenants")
@@ -69,6 +126,7 @@ export default function App() {
           if (found) {
             setActiveTenant(found);
             setActiveTab(tabName);
+            setVisitedTabs((prev) => prev.includes(tabName) ? prev : [...prev, tabName]);
             setIsLoggedIn(true);
             setCurrentUser({
               id: "user-admin-1",
@@ -92,6 +150,7 @@ export default function App() {
           });
           setActiveRole("super_admin");
           setActiveTab(pathParts[1]);
+          setVisitedTabs((prev) => prev.includes(pathParts[1]) ? prev : [...prev, pathParts[1]]);
         } else if (data.length > 0) {
           setActiveTenant(data[0]);
         }
@@ -130,9 +189,11 @@ export default function App() {
         if (foundTenant) {
           setActiveTenant(foundTenant);
           setActiveTab(tabName);
+          setVisitedTabs((prev) => prev.includes(tabName) ? prev : [...prev, tabName]);
         }
       } else if (pathParts[0] === "super-admin" && pathParts[1]) {
         setActiveTab(pathParts[1]);
+        setVisitedTabs((prev) => prev.includes(pathParts[1]) ? prev : [...prev, pathParts[1]]);
       }
     };
 
@@ -187,8 +248,37 @@ export default function App() {
       if (currentUser && currentUser.role !== "super_admin") {
         setCurrentUser(prev => prev ? { ...prev, tenantId: found.id } : null);
       }
+      // Prefetch dashboard for the newly selected tenant
+      if ((window as any).prefetchDashboard) {
+        (window as any).prefetchDashboard(found.id);
+      }
     }
   };
+
+  const fallbackTenant: Tenant = {
+    id: "tenant-alpha",
+    name: "Alpha Logistics Inc",
+    domain: "alpha.logistics.com",
+    plan: "pro",
+    status: "active",
+    createdAt: "2026-01-10",
+    whatsappLimit: 100000,
+    aiCredits: 5000,
+    aiUsed: 1240,
+    phoneNumbersCount: 2,
+    maxUsersCount: 15,
+    internalChatEnabled: true,
+    allowedFeatures: ["live_inbox", "internal_chat", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing", "open_api"]
+  };
+
+  const currentTenant = activeTenant || tenants[0] || fallbackTenant;
+
+  // Prefetch dashboard immediately on login/authentication state change
+  useEffect(() => {
+    if (isLoggedIn && currentTenant && (window as any).prefetchDashboard) {
+      (window as any).prefetchDashboard(currentTenant.id);
+    }
+  }, [isLoggedIn, currentTenant?.id]);
 
   if (loading) {
     return (
@@ -216,24 +306,6 @@ export default function App() {
       />
     );
   }
-
-  const fallbackTenant: Tenant = {
-    id: "tenant-alpha",
-    name: "Alpha Logistics Inc",
-    domain: "alpha.logistics.com",
-    plan: "pro",
-    status: "active",
-    createdAt: "2026-01-10",
-    whatsappLimit: 100000,
-    aiCredits: 5000,
-    aiUsed: 1240,
-    phoneNumbersCount: 2,
-    maxUsersCount: 15,
-    internalChatEnabled: true,
-    allowedFeatures: ["live_inbox", "internal_chat", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing", "open_api"]
-  };
-
-  const currentTenant = activeTenant || tenants[0] || fallbackTenant;
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 font-sans relative">
@@ -268,6 +340,7 @@ export default function App() {
           onLogOut={() => {
             setIsLoggedIn(false);
             setCurrentUser(null);
+            setVisitedTabs(["dashboard"]);
           }}
         />
       </div>
@@ -295,91 +368,149 @@ export default function App() {
             {activeTab.replace(/_/g, " ")}
           </div>
         </header>
-        {activeTab === "dashboard" && currentTenant && (
-          <Dashboard tenantId={currentTenant.id} />
-        )}
-        
-        {activeTab === "live_inbox" && currentTenant && (
-          <LiveInbox tenantId={currentTenant.id} />
-        )}
 
-        {activeTab === "campaigns" && currentTenant && (
-          <Campaigns tenantId={currentTenant.id} />
-        )}
+        {/* KEEP-ALIVE COMPONENT CARRIER PANELS */}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "dashboard" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("dashboard") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <Dashboard tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "templates" && currentTenant && (
-          <Templates tenantId={currentTenant.id} />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "live_inbox" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("live_inbox") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <LiveInbox tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "chatbot_builder" && currentTenant && (
-          <ChatbotBuilder tenantId={currentTenant.id} />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "campaigns" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("campaigns") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <Campaigns tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "crm" && currentTenant && (
-          <CRM tenantId={currentTenant.id} />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "templates" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("templates") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <Templates tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "flows_automation" && currentTenant && (
-          <FlowsAndAutomation tenantId={currentTenant.id} />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "chatbot_builder" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("chatbot_builder") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <ChatbotBuilder tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "message_router" && currentTenant && (
-          <MessageRouter tenantId={currentTenant.id} />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "crm" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("crm") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <CRM tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "billing" && currentTenant && (
-          <Billing tenantId={currentTenant.id} />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "flows_automation" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("flows_automation") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <FlowsAndAutomation tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "open_api" && currentTenant && (
-          <OpenApiSettings tenantId={currentTenant.id} />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "message_router" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("message_router") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <MessageRouter tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "tenant_settings" && currentTenant && (
-          <TenantSettings tenantId={currentTenant.id} />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "billing" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("billing") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <Billing tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "internal_chat" && currentTenant && (
-          <InternalChat 
-            tenantId={currentTenant.id} 
-            currentUser={{
-              id: currentUser.id,
-              name: currentUser.name,
-              email: currentUser.email,
-              role: currentUser.role
-            }}
-            internalChatEnabled={currentTenant.internalChatEnabled !== false}
-          />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "open_api" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("open_api") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <OpenApiSettings tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab === "staff_permissions" && currentTenant && (
-          <StaffPermissions 
-            tenantId={currentTenant.id} 
-            currentUserId={currentUser.id}
-            maxUsersCount={currentTenant.maxUsersCount}
-            onLoginAsUser={(user) => {
-              setCurrentUser({
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                role: user.role,
-                tenantId: user.tenantId,
-                permissions: user.permissions
-              });
-              setActiveRole(user.role);
-              setActiveTab("dashboard");
-            }}
-          />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "tenant_settings" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("tenant_settings") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <TenantSettings tenantId={currentTenant.id} />
+            </Suspense>
+          )}
+        </div>
 
-        {activeTab.startsWith("super_") && (
-          <SuperAdmin 
-            tenants={tenants} 
-            setTenants={setTenants} 
-            currentTab={activeTab} 
-            setCurrentTab={setActiveTab} 
-          />
-        )}
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "internal_chat" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("internal_chat") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <InternalChat 
+                tenantId={currentTenant.id} 
+                currentUser={{
+                  id: currentUser.id,
+                  name: currentUser.name,
+                  email: currentUser.email,
+                  role: currentUser.role
+                }}
+                internalChatEnabled={currentTenant.internalChatEnabled !== false}
+              />
+            </Suspense>
+          )}
+        </div>
+
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === "staff_permissions" ? "block" : "hidden"}`}>
+          {visitedTabs.includes("staff_permissions") && currentTenant && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <StaffPermissions 
+                tenantId={currentTenant.id} 
+                currentUserId={currentUser.id}
+                maxUsersCount={currentTenant.maxUsersCount}
+                onLoginAsUser={(user) => {
+                  setCurrentUser({
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    role: user.role,
+                    tenantId: user.tenantId,
+                    permissions: user.permissions
+                  });
+                  setActiveRole(user.role);
+                  setActiveTab("dashboard");
+                }}
+              />
+            </Suspense>
+          )}
+        </div>
+
+        <div className={`flex-1 flex flex-col overflow-hidden ${activeTab.startsWith("super_") ? "block" : "hidden"}`}>
+          {(visitedTabs.includes("super_dashboard") || visitedTabs.includes("super_tenants") || visitedTabs.includes("super_webhooks")) && (
+            <Suspense fallback={<TabLoadingSpinner />}>
+              <SuperAdmin 
+                tenants={tenants} 
+                setTenants={setTenants} 
+                currentTab={activeTab} 
+                setCurrentTab={setActiveTab} 
+              />
+            </Suspense>
+          )}
+        </div>
       </div>
     </div>
   );

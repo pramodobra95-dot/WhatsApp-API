@@ -195,6 +195,11 @@ export default function Sidebar({
                       onCloseMobile();
                     }
                   }}
+                  onMouseEnter={() => {
+                    if (item.id === "dashboard" && selectedTenantId && (window as any).prefetchDashboard) {
+                      (window as any).prefetchDashboard(selectedTenantId);
+                    }
+                  }}
                   className={`w-full flex items-center ${isCollapsed ? 'justify-center py-2.5' : 'justify-between px-3 py-1.5'} rounded-lg text-xs font-medium transition-all relative ${
                     isActive
                       ? "bg-blue-50 text-blue-700 font-bold"

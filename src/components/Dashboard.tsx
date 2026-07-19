@@ -42,11 +42,23 @@ export default function Dashboard({ tenantId }: DashboardProps) {
 
   const fetchDashboardData = () => {
     if (!tenantId) return;
+
+    // Check prefetch cache first to enable instant loads
+    const cache = (window as any).__dashboardCache;
+    if (cache && cache[tenantId] && cache[tenantId].data) {
+      setData(cache[tenantId].data);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     fetch(`/api/tenants/${tenantId}/dashboard`)
       .then(res => res.json())
-      .then(data => {
-        setData(data);
+      .then(fetchedData => {
+        if (cache) {
+          cache[tenantId] = { data: fetchedData, timestamp: Date.now() };
+        }
+        setData(fetchedData);
         setLoading(false);
       })
       .catch(err => {
@@ -57,6 +69,20 @@ export default function Dashboard({ tenantId }: DashboardProps) {
 
   useEffect(() => {
     fetchDashboardData();
+
+    // Handle real-time prefetch event completion in case it was triggered on hover or login
+    const handlePrefetched = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        setData(customEvent.detail);
+        setLoading(false);
+      }
+    };
+
+    window.addEventListener(`dashboard-prefetched-${tenantId}`, handlePrefetched);
+    return () => {
+      window.removeEventListener(`dashboard-prefetched-${tenantId}`, handlePrefetched);
+    };
   }, [tenantId]);
 
   if (loading || !data) {
