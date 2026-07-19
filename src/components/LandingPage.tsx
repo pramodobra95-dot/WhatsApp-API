@@ -63,6 +63,40 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
 
+  const [subPage, setSubPage] = useState<null | "services" | "terms" | "privacy">(null);
+
+  // Synchronize hash in URL with subPage state for Meta API verification compliance
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash === "#services") {
+        setSubPage("services");
+      } else if (hash === "#terms") {
+        setSubPage("terms");
+      } else if (hash === "#privacy") {
+        setSubPage("privacy");
+      } else if (!hash || hash === "#" || hash.startsWith("#features") || hash.startsWith("#running-dashboard") || hash.startsWith("#bant") || hash.startsWith("#scheduler")) {
+        setSubPage(null);
+      }
+    };
+
+    handleHashChange();
+    window.addEventListener("hashchange", handleHashChange);
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, []);
+
+  const navigateToSubPage = (page: null | "services" | "terms" | "privacy") => {
+    setSubPage(page);
+    if (page) {
+      window.location.hash = page;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      window.location.hash = "";
+    }
+  };
+
   // Demo Scheduler State
   const [bookingStep, setBookingStep] = useState<"form" | "success">("form");
   const [selectedDate, setSelectedDate] = useState<string>("2026-07-20");
@@ -432,7 +466,10 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           
           {/* Logo with "BouuZ AI" brand context */}
-          <div className="flex items-center gap-2.5">
+          <div 
+            onClick={() => navigateToSubPage(null)} 
+            className="flex items-center gap-2.5 cursor-pointer select-none"
+          >
             <div className="w-9 h-9 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-950/40 relative group overflow-hidden">
               <span className="text-white font-black text-sm relative z-10">B</span>
               <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -447,19 +484,58 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           </div>
 
           {/* Nav Links */}
-          <nav className="hidden md:flex items-center gap-8 text-xs font-semibold text-slate-400">
-            <a href="#features" className="hover:text-emerald-400 transition-colors">Features</a>
-            <a href="#running-dashboard" className="hover:text-emerald-400 text-emerald-400 transition-colors flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span> Live Dashboard View
+          <nav className="hidden md:flex items-center gap-6 text-xs font-semibold text-slate-400">
+            <button 
+              onClick={() => navigateToSubPage(null)}
+              className={`hover:text-emerald-400 transition-colors cursor-pointer ${subPage === null ? "text-emerald-400" : ""}`}
+            >
+              Home
+            </button>
+            <a 
+              href="#services" 
+              onClick={(e) => { e.preventDefault(); navigateToSubPage("services"); }}
+              className={`hover:text-emerald-400 transition-colors cursor-pointer ${subPage === "services" ? "text-emerald-400 font-bold" : ""}`}
+            >
+              Services
             </a>
-            <a href="#bant" className="hover:text-emerald-400 transition-colors">BANT Validation</a>
-            <a href="#scheduler" className="hover:text-emerald-400 transition-colors">Book Strategy Demo</a>
+            <a 
+              href="#terms" 
+              onClick={(e) => { e.preventDefault(); navigateToSubPage("terms"); }}
+              className={`hover:text-emerald-400 transition-colors cursor-pointer ${subPage === "terms" ? "text-emerald-400 font-bold" : ""}`}
+            >
+              Terms & Conditions
+            </a>
+            <a 
+              href="#privacy" 
+              onClick={(e) => { e.preventDefault(); navigateToSubPage("privacy"); }}
+              className={`hover:text-emerald-400 transition-colors cursor-pointer ${subPage === "privacy" ? "text-emerald-400 font-bold" : ""}`}
+            >
+              Privacy Policy
+            </a>
+            {subPage === null && (
+              <>
+                <a href="#features" className="hover:text-emerald-400 transition-colors">Features</a>
+                <a href="#running-dashboard" className="hover:text-emerald-400 transition-colors flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span> Live View
+                </a>
+                <a href="#scheduler" className="hover:text-emerald-400 transition-colors">Book Demo</a>
+              </>
+            )}
           </nav>
 
           {/* Action CTA */}
           <div className="flex items-center gap-3">
             <a 
               href="#scheduler" 
+              onClick={(e) => {
+                if (subPage !== null) {
+                  navigateToSubPage(null);
+                  setTimeout(() => {
+                    const el = document.getElementById("scheduler");
+                    el?.scrollIntoView({ behavior: "smooth" });
+                  }, 100);
+                }
+              }}
               className="text-xs font-semibold text-slate-300 hover:text-white transition px-3 py-2 hidden sm:block"
             >
               Get Demo Webhook
@@ -477,7 +553,9 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         </div>
       </header>
 
-      {/* HERO SECTION */}
+      {subPage === null ? (
+        <>
+          {/* HERO SECTION */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-20 text-center relative">
         <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider mb-8 shadow-sm">
           <Sparkles className="h-3.5 w-3.5 text-yellow-400 animate-spin" /> Autonomous Qualification Channels are Now Active
@@ -1219,17 +1297,50 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           </div>
         </div>
       </section>
+        </>
+      ) : subPage === "services" ? (
+        <ServicesView onBack={() => navigateToSubPage(null)} />
+      ) : subPage === "terms" ? (
+        <TermsView onBack={() => navigateToSubPage(null)} />
+      ) : (
+        <PrivacyView onBack={() => navigateToSubPage(null)} />
+      )}
 
       {/* FOOTER */}
       <footer className="bg-[#04080e] py-12 border-t border-slate-900">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500 space-y-4">
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-2 cursor-pointer select-none" onClick={() => navigateToSubPage(null)}>
             <div className="w-7 h-7 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-xs">B</div>
             <span className="font-bold text-sm tracking-tight text-white">BouuZ AI</span>
           </div>
           <p className="max-w-md mx-auto leading-relaxed">
             Autonomous qualification channels and secure database-isolated tenant systems powered by standard REST API webhooks.
           </p>
+          <div className="flex justify-center gap-6 text-[11px] text-slate-400 mt-2 flex-wrap">
+            <a 
+              href="#services" 
+              onClick={(e) => { e.preventDefault(); navigateToSubPage("services"); }}
+              className="hover:text-emerald-400 transition-colors"
+            >
+              Our Services
+            </a>
+            <span className="text-slate-800">|</span>
+            <a 
+              href="#terms" 
+              onClick={(e) => { e.preventDefault(); navigateToSubPage("terms"); }}
+              className="hover:text-emerald-400 transition-colors"
+            >
+              Terms of Service & Conditions
+            </a>
+            <span className="text-slate-800">|</span>
+            <a 
+              href="#privacy" 
+              onClick={(e) => { e.preventDefault(); navigateToSubPage("privacy"); }}
+              className="hover:text-emerald-400 transition-colors"
+            >
+              Privacy Policy & GDPR
+            </a>
+          </div>
           <div className="border-t border-slate-900/40 pt-6 mt-6 flex flex-wrap justify-center gap-6 text-[11px]">
             <span>© 2026 BouuZ AI Systems. All rights reserved.</span>
             <span className="text-slate-400">Powered by BANTConfirm Integration Engine</span>
@@ -1372,6 +1483,275 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
         </div>
       )}
 
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// META COMPLIANT SERVICE DESCRIPTION VIEW
+// ----------------------------------------------------------------------
+function ServicesView({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 animate-fade-in text-slate-300">
+      <div className="mb-8">
+        <button 
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition cursor-pointer bg-slate-900/60 hover:bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl shadow-md"
+        >
+          ← Back to Homepage
+        </button>
+      </div>
+
+      <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider mb-6 shadow-sm">
+        Official Webhook Channels
+      </div>
+
+      <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-tight mb-4">
+        Our Services & Meta Cloud API Solutions
+      </h1>
+      <p className="text-slate-400 text-sm mb-12 max-w-2xl leading-relaxed">
+        BouuZ AI provides professional SaaS systems, isolated multi-tenant data pipelines, and custom API routing services to help enterprises integrate and manage official Meta WhatsApp Business Profiles seamlessly.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-slate-900/40 border border-slate-800/80 p-6 sm:p-8 rounded-3xl relative group hover:border-slate-700 transition">
+          <div className="absolute top-6 right-6 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold font-mono text-xs">01</div>
+          <h2 className="text-lg font-bold text-white mb-3">WhatsApp Cloud API Deployment</h2>
+          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-4">
+            We onboard enterprises onto Meta's official WhatsApp Cloud API framework. This includes configuring Developer Console applications, configuring secure system user tokens, registering business profile credentials, and verifying official green ticks.
+          </p>
+          <ul className="text-xs space-y-2 text-slate-400 border-t border-slate-800/50 pt-4">
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Official Meta Cloud API onboarding assistance
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Production webhook configurations with zero lag
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Professional WhatsApp Business Profile mapping
+            </li>
+          </ul>
+        </div>
+
+        <div className="bg-slate-900/40 border border-slate-800/80 p-6 sm:p-8 rounded-3xl relative group hover:border-slate-700 transition">
+          <div className="absolute top-6 right-6 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold font-mono text-xs">02</div>
+          <h2 className="text-lg font-bold text-white mb-3">Autonomous BANT Qualification</h2>
+          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-4">
+            Our state-of-the-art conversational parser evaluates live customer chat logs on the fly. It reads incoming message payloads to extract BANT (Budget, Authority, Need, Timeline) qualification data and update active pipelines instantly.
+          </p>
+          <ul className="text-xs space-y-2 text-slate-400 border-t border-slate-800/50 pt-4">
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Natural language qualification mapping
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Automated deal volume estimation visualizers
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Priority queuing for highly qualified prospects
+            </li>
+          </ul>
+        </div>
+
+        <div className="bg-slate-900/40 border border-slate-800/80 p-6 sm:p-8 rounded-3xl relative group hover:border-slate-700 transition">
+          <div className="absolute top-6 right-6 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold font-mono text-xs">03</div>
+          <h2 className="text-lg font-bold text-white mb-3">Multi-Tenant CRM Webhooks</h2>
+          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-4">
+            We operate isolated multi-tenant databases and REST API nodes to route your lead logs directly into major systems like HubSpot, Salesforce, or custom Rest gateways without cross-tenant data leaks.
+          </p>
+          <ul className="text-xs space-y-2 text-slate-400 border-t border-slate-800/50 pt-4">
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Custom outbound JSON payload configurations
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Automated failover retries & webhook logging
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> PostgreSQL schema-level subscriber separation
+            </li>
+          </ul>
+        </div>
+
+        <div className="bg-slate-900/40 border border-slate-800/80 p-6 sm:p-8 rounded-3xl relative group hover:border-slate-700 transition">
+          <div className="absolute top-6 right-6 w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold font-mono text-xs">04</div>
+          <h2 className="text-lg font-bold text-white mb-3">Operator Live Inbox & Broadcasts</h2>
+          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-4">
+            A beautiful unified support console for multi-agent support teams. Agents can send messaging templates approved by Meta, manage active campaigns, resolve customer queries, and keep track of opt-in statuses.
+          </p>
+          <ul className="text-xs space-y-2 text-slate-400 border-t border-slate-800/50 pt-4">
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Compliance-first Meta template variable placeholders
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> Dynamic operator assignment & agent collaborative chats
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-emerald-400">✔</span> User Opt-In/Opt-Out status controllers
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// META COMPLIANT TERMS AND CONDITIONS VIEW
+// ----------------------------------------------------------------------
+function TermsView({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 animate-fade-in text-slate-300">
+      <div className="mb-8">
+        <button 
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition cursor-pointer bg-slate-900/60 hover:bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl shadow-md"
+        >
+          ← Back to Homepage
+        </button>
+      </div>
+
+      <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider mb-6 shadow-sm">
+        Platform Legal Agreements
+      </div>
+
+      <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-tight mb-2">
+        Terms of Service & Conditions
+      </h1>
+      <p className="text-slate-400 text-xs font-mono uppercase tracking-widest mb-10">Last Updated: July 19, 2026</p>
+
+      <div className="space-y-6 text-xs sm:text-sm text-slate-400 leading-relaxed max-w-3xl">
+        <p>
+          Welcome to BouuZ AI. These Terms of Service ("Terms") govern your access to and use of the BouuZ AI web applications, multi-tenant sandboxes, API gateways, and services (collectively, the "Service") provided by BouuZ AI Systems ("Company", "we", "us", or "our").
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">1. Agreement to Terms</h2>
+        <p>
+          By creating an account, linking your Meta Cloud API, or accessing any part of our workspace, you acknowledge that you have read, understood, and agree to be bound by these Terms. If you are entering into these Terms on behalf of a company, you represent that you have the authority to bind such entity.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">2. Meta Platform and WhatsApp Compliance</h2>
+        <div className="border-l-2 border-emerald-500 pl-4 bg-slate-900/25 p-4 rounded-r-2xl border border-slate-800/80 my-4">
+          <strong className="text-white block mb-1">CRITICAL USER DIRECTIVE:</strong>
+          The Service integrates directly with Meta Platforms, Inc. and the WhatsApp Business Solution API. All users of our Service must comply with the official WhatsApp Business Solution Terms, Meta Developer Policies, and WhatsApp Commerce Policy.
+        </div>
+        <p>
+          You represent and warrant that you will obtain explicit prior consent ("Opt-In") from any customer or recipient before dispatching outbound template messages or initiating campaigns through our Service. You are solely responsible for managing opt-out requests immediately. Any violation of Meta's messaging rules will result in the immediate termination of your access to our Service.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">3. Account Registration & Isolated Sandbox</h2>
+        <p>
+          To use our platform, you must register a tenant account. We provide secure PostgreSQL schema-level isolation for your contacts, campaigns, and webhook configurations. You are responsible for safeguarding your portal passwords and Meta API system user tokens. The Company shall not be liable for any unauthorized access resulting from user credential leakage.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">4. Acceptable Use Policy</h2>
+        <p>
+          You agree not to use the Service to transmit any content that is unlawful, harmful, threatening, abusive, or designed to spam, harass, or mislead consumers. You may not deploy conversational flows that violate local consumer protection, financial services, or healthcare communication laws.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">5. Conversational Fees & Billing</h2>
+        <p>
+          Subscriptions are billed on a monthly recurring basis. In addition to our subscription fees, you are responsible for any destination-based message transit charges billed by Meta Platforms for WhatsApp conversational messaging.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">6. Disclaimer of Warranties & Limitation of Liability</h2>
+        <p>
+          The Service is provided "AS IS" and "AS AVAILABLE" without any warranties, express or implied. We do not warrant that the Service will be uninterrupted, error-free, or that webhook deliveries will never face transit loss due to upstream Meta API downtime. In no event shall BouuZ AI Systems be liable for any indirect, incidental, special, or consequential damages.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">7. Governing Law & Dispute Resolution</h2>
+        <p>
+          These Terms shall be governed by and construed in accordance with the laws of Delaware, United States, without regard to its conflict of law principles. Any dispute arising out of these terms shall be resolved exclusively in the state and federal courts located in Delaware.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">8. Contact Us</h2>
+        <p>
+          For legal inquiries or clarifications on Meta API policies, please contact: <span className="text-emerald-400 font-mono">legal@bouuz.com</span>.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// META COMPLIANT PRIVACY POLICY VIEW
+// ----------------------------------------------------------------------
+function PrivacyView({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 animate-fade-in text-slate-300">
+      <div className="mb-8">
+        <button 
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition cursor-pointer bg-slate-900/60 hover:bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-xl shadow-md"
+        >
+          ← Back to Homepage
+        </button>
+      </div>
+
+      <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider mb-6 shadow-sm">
+        Data Protection Standards
+      </div>
+
+      <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-tight mb-2">
+        Privacy Policy & GDPR Statement
+      </h1>
+      <p className="text-slate-400 text-xs font-mono uppercase tracking-widest mb-10">Last Updated: July 19, 2026</p>
+
+      <div className="space-y-6 text-xs sm:text-sm text-slate-400 leading-relaxed max-w-3xl">
+        <p>
+          At BouuZ AI, we are committed to protecting the privacy and security of your corporate data as well as the personal data of the consumers you communicate with through the Meta WhatsApp Business API. This Privacy Policy describes how we collect, use, process, and disclose information within our platform.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">1. Information We Collect</h2>
+        <p>
+          When you use our Service, we act as a Data Processor on your behalf under GDPR guidelines. We collect the following categories of information:
+        </p>
+        <ul className="list-disc pl-5 space-y-2 mt-2 text-slate-400">
+          <li><strong>Workspace Credentials:</strong> Name, work email, and passwords used to configure tenant roles.</li>
+          <li><strong>Meta API Metadata:</strong> Meta Developer access tokens, WhatsApp business account IDs, and routing webhook endpoints.</li>
+          <li><strong>Recipient Data:</strong> Customer phone numbers, contact names, and associated CRM custom property maps.</li>
+          <li><strong>Message Log Payloads:</strong> Incoming text messages, template parameters, delivery statuses, and qualifying BANT scores calculated during active automation sessions.</li>
+        </ul>
+
+        <h2 className="text-base font-bold text-white mt-8">2. How We Use Information</h2>
+        <p>
+          We use the processed data strictly to provide the features of the BouuZ AI platform, including:
+        </p>
+        <ul className="list-disc pl-5 space-y-2 mt-2 text-slate-400">
+          <li>Transmitting and receiving messages between your Meta WhatsApp Cloud API node and support agents.</li>
+          <li>Analyzing text metrics using our local classification model to evaluate lead fit scorecard values.</li>
+          <li>Triggering outbound JSON webhook deliveries to update your designated HubSpot, Salesforce, or custom CRM.</li>
+          <li>Generating live delivery rating statistics, dispatched volume charts, and campaign reports.</li>
+        </ul>
+
+        <h2 className="text-base font-bold text-white mt-8">3. Data Separation & Isolated Storage</h2>
+        <p>
+          We employ a robust multi-tenant sandbox model. Your recipient lists, conversation logs, and secret tokens are hosted inside an isolated database schema instance configured exclusively for your tenant ID. No customer data or message content is shared, merged, or visible across different client organizations.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">4. GDPR & Data Subject Rights</h2>
+        <p>
+          Under the General Data Protection Regulation (GDPR), European Union citizens have specific rights regarding their personal data. As the Data Processor, we support our clients in responding to inquiries, including:
+        </p>
+        <ul className="list-disc pl-5 space-y-2 mt-2 text-slate-400">
+          <li><strong>Right of Access:</strong> Reviewing specific conversation records stored under a contact's profile.</li>
+          <li><strong>Right to Rectification:</strong> Modifying incorrect lead numbers or custom attributes.</li>
+          <li><strong>Right to Erasure:</strong> Permanently purging specific contact records and associated messaging logs from the active tenant database.</li>
+        </ul>
+
+        <h2 className="text-base font-bold text-white mt-8">5. Data Retention Policies</h2>
+        <p>
+          We retain personal data and message payloads only as long as your tenant account remains active or as required by you to fulfill business campaign targets. You can initiate full data deletion processes at any time inside the Tenant Portal settings workspace.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">6. Security Measures</h2>
+        <p>
+          All data in transit is encrypted using TLS 1.3 standards. Data at rest is encrypted using AES-256 standard protocols. Access to internal database servers is limited via strict cloud firewall rules and isolated subnet routing gateways.
+        </p>
+
+        <h2 className="text-base font-bold text-white mt-8">7. Contact and Data Protection Officer</h2>
+        <p>
+          If you have any questions about this Privacy Policy or our data protection protocols, please reach out to our team at: <span className="text-emerald-400 font-mono">privacy@bouuz.com</span>.
+        </p>
+      </div>
     </div>
   );
 }
