@@ -59,7 +59,40 @@ export default function App() {
       .then((res) => res.json())
       .then((data) => {
         setTenants(data);
-        if (data.length > 0) {
+        
+        // Dynamic Path-Based Router: Extract tenant ID and active tab from URL on boot
+        const pathParts = window.location.pathname.split("/").filter(Boolean);
+        if (pathParts.length >= 2) {
+          const tenantId = pathParts[0];
+          const tabName = pathParts[1];
+          const found = data.find((t: Tenant) => t.id === tenantId);
+          if (found) {
+            setActiveTenant(found);
+            setActiveTab(tabName);
+            setIsLoggedIn(true);
+            setCurrentUser({
+              id: "user-admin-1",
+              email: "talentadmin@bouuz.com",
+              name: "Jessica Lopez (Talent Admin)",
+              role: "tenant_admin",
+              tenantId: found.id,
+              permissions: ["dashboard", "live_inbox", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing"]
+            });
+            setActiveRole("tenant_admin");
+          }
+        } else if (pathParts[0] === "super-admin" && pathParts[1]) {
+          setIsLoggedIn(true);
+          setCurrentUser({
+            id: "super-admin-root",
+            email: "admin@bouuz.com",
+            name: "BouuZ Super Admin",
+            role: "super_admin",
+            tenantId: "tenant-alpha",
+            permissions: ["super_dashboard", "super_tenants", "super_webhooks"]
+          });
+          setActiveRole("super_admin");
+          setActiveTab(pathParts[1]);
+        } else if (data.length > 0) {
           setActiveTenant(data[0]);
         }
         setLoading(false);
@@ -73,6 +106,39 @@ export default function App() {
   useEffect(() => {
     fetchTenants();
   }, []);
+
+  // Sync state transitions back to URL history to enable bookmarking and sharing
+  useEffect(() => {
+    if (isLoggedIn && currentUser && activeTenant) {
+      const newPath = activeTab.startsWith("super_")
+        ? `/super-admin/${activeTab}`
+        : `/${activeTenant.id}/${activeTab}`;
+      if (window.location.pathname !== newPath) {
+        window.history.pushState(null, "", newPath);
+      }
+    }
+  }, [isLoggedIn, currentUser, activeTenant, activeTab]);
+
+  // Listener to support fully native browser back/forward routing events
+  useEffect(() => {
+    const handlePopState = () => {
+      const pathParts = window.location.pathname.split("/").filter(Boolean);
+      if (pathParts.length >= 2) {
+        const tenantId = pathParts[0];
+        const tabName = pathParts[1];
+        const foundTenant = tenants.find((t) => t.id === tenantId);
+        if (foundTenant) {
+          setActiveTenant(foundTenant);
+          setActiveTab(tabName);
+        }
+      } else if (pathParts[0] === "super-admin" && pathParts[1]) {
+        setActiveTab(pathParts[1]);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [tenants]);
 
   // Synchronize simulated role clicks with simulated user session details
   const handleSetSimulatedRole = (role: "super_admin" | "tenant_admin" | "manager" | "agent" | "viewer") => {
@@ -88,22 +154,24 @@ export default function App() {
       });
       setActiveTab("super_dashboard");
     } else if (role === "tenant_admin") {
+      const targetTenant = activeTenant || tenants[0] || fallbackTenant;
       setCurrentUser({
         id: "user-admin-1",
         email: "talentadmin@bouuz.com",
         name: "Jessica Lopez (Talent Admin)",
         role: "tenant_admin",
-        tenantId: "tenant-alpha",
+        tenantId: targetTenant.id,
         permissions: ["dashboard", "live_inbox", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing"]
       });
       setActiveTab("dashboard");
     } else {
+      const targetTenant = activeTenant || tenants[0] || fallbackTenant;
       setCurrentUser({
         id: "user-agent-1",
         email: "talent@bouuz.com",
         name: "Rohan Sharma (Talent)",
         role: "agent",
-        tenantId: "tenant-alpha",
+        tenantId: targetTenant.id,
         permissions: ["live_inbox", "message_router", "chatbot_builder"] // Default restricted agent permissions
       });
       setActiveTab("dashboard");
@@ -115,6 +183,10 @@ export default function App() {
     const found = tenants.find((t) => t.id === tenantId);
     if (found) {
       setActiveTenant(found);
+      // Synchronize current user with newly selected tenant
+      if (currentUser && currentUser.role !== "super_admin") {
+        setCurrentUser(prev => prev ? { ...prev, tenantId: found.id } : null);
+      }
     }
   };
 

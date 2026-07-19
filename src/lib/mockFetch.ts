@@ -302,18 +302,34 @@ export function handleMockFetch(url: string, init?: RequestInit): Response {
       name: body.name || "Untitled Campaign",
       templateId: body.templateId || "temp-marketing-1",
       segmentId: body.segmentId || "all",
-      status: body.scheduledTime ? "scheduled" : "completed",
+      status: body.scheduledTime ? "scheduled" : "draft",
       scheduledTime: body.scheduledTime,
-      sentCount: body.scheduledTime ? 0 : 500,
-      deliveredCount: body.scheduledTime ? 0 : 495,
-      readCount: body.scheduledTime ? 0 : 410,
-      clickedCount: body.scheduledTime ? 0 : 80,
-      failedCount: body.scheduledTime ? 0 : 5,
+      sentCount: 0,
+      deliveredCount: 0,
+      readCount: 0,
+      clickedCount: 0,
+      failedCount: 0,
       createdAt: new Date().toISOString().split("T")[0]
     };
     campaigns.push(newCampaign);
     saveDBItem("campaigns", campaigns);
     return jsonResponse(newCampaign, 201);
+  }
+
+  // 10.5 PATCH /api/campaigns/:tenantId/:id
+  const campaignPatchMatch = path.match(/\/api\/campaigns\/([^/]+)\/([^/]+)$/);
+  if (campaignPatchMatch && method === "PATCH") {
+    const tenantId = campaignPatchMatch[1];
+    const id = campaignPatchMatch[2];
+    const body = JSON.parse(init?.body as string || "{}");
+    const campaigns = getDBItem<Campaign[]>("campaigns", INITIAL_CAMPAIGNS);
+    const idx = campaigns.findIndex(c => c.tenantId === tenantId && c.id === id);
+    if (idx !== -1) {
+      campaigns[idx] = { ...campaigns[idx], ...body };
+      saveDBItem("campaigns", campaigns);
+      return jsonResponse(campaigns[idx]);
+    }
+    return jsonResponse({ error: "Campaign not found" }, 404);
   }
 
   // 11. GET /api/templates/:tenantId

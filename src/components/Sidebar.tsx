@@ -152,7 +152,26 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Tenant Switcher & Simulation Sandbox Controls hidden as requested */}
+      {/* Active Tenant Workspace Switcher */}
+      {!isCollapsed && tenants && tenants.length > 0 && (
+        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex flex-col gap-1.5 shrink-0 animate-fade-in">
+          <span className="text-[9px] uppercase tracking-widest text-slate-400 font-extrabold font-mono flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+            Workspace Tenant
+          </span>
+          <select
+            value={selectedTenantId}
+            onChange={(e) => setSelectedTenantId(e.target.value)}
+            className="w-full bg-white border border-slate-200 hover:border-slate-300 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs transition"
+          >
+            {tenants.map((t) => (
+              <option key={t.id} value={t.id}>
+                🏢 {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Menu Navigation Scrollable */}
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
