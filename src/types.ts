@@ -28,6 +28,7 @@ export interface Tenant {
   phoneNumbersCount: number;
   maxUsersCount: number;
   internalChatEnabled: boolean;
+  allowedFeatures?: string[];
 }
 
 export interface WhatsAppPhoneNumber {
@@ -187,4 +188,15 @@ export interface RoutingRule {
   conditionValue: string; // comma-separated keywords, sentiment type, hours, etc.
   targetDestination: string; // Agent Alice, Agent Bob, Support Group, Sales Group, AI Chatbot
 }
+
+export interface TenantMetaConfig {
+  tenantId: string;
+  appId: string;
+  appSecret: string;
+  systemUserToken: string;
+  webhookVerifyToken: string;
+  webhookUrl: string;
+  isConfigured: boolean;
+}
+
 

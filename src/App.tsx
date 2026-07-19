@@ -24,6 +24,8 @@ import StaffPermissions from "./components/StaffPermissions";
 import TenantSettings from "./components/TenantSettings";
 import InternalChat from "./components/InternalChat";
 import Login from "./components/Login";
+import OpenApiSettings from "./components/OpenApiSettings";
+import LandingPage from "./components/LandingPage";
 import { Tenant } from "./types";
 import { RefreshCw, Menu } from "lucide-react";
 
@@ -37,7 +39,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Authentication & Credentials States
-  const [isLoggedIn, setIsLoggedIn] = useState(true); // Pre-logged in for quick preview sandbox!
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // Default to false for landing page on boot!
   const [currentUser, setCurrentUser] = useState<{
     id: string;
     email: string;
@@ -45,14 +47,7 @@ export default function App() {
     role: "super_admin" | "tenant_admin" | "manager" | "agent" | "viewer";
     tenantId: string;
     permissions: string[];
-  } | null>({
-    id: "user-admin-1",
-    email: "talentadmin@bouuz.com",
-    name: "Jessica Lopez (Talent Admin)",
-    role: "tenant_admin",
-    tenantId: "tenant-alpha",
-    permissions: ["dashboard", "live_inbox", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing"]
-  });
+  } | null>(null);
 
   // Active Role simulator in sync with current user role
   const [activeRole, setActiveRole] = useState<"super_admin" | "tenant_admin" | "manager" | "agent" | "viewer">("tenant_admin");
@@ -132,10 +127,10 @@ export default function App() {
     );
   }
 
-  // If logged out, render the magnificent Login screen
+  // If logged out, render the magnificent LandingPage screen which has single login built-in!
   if (!isLoggedIn || !currentUser) {
     return (
-      <Login 
+      <LandingPage 
         onLoginSuccess={(user) => {
           setCurrentUser(user);
           setActiveRole(user.role);
@@ -246,6 +241,10 @@ export default function App() {
           <Billing tenantId={activeTenant.id} />
         )}
 
+        {activeTab === "open_api" && activeTenant && (
+          <OpenApiSettings tenantId={activeTenant.id} />
+        )}
+
         {activeTab === "tenant_settings" && activeTenant && (
           <TenantSettings tenantId={activeTenant.id} />
         )}
@@ -284,7 +283,12 @@ export default function App() {
         )}
 
         {activeTab.startsWith("super_") && (
-          <SuperAdmin tenants={tenants} setTenants={setTenants} />
+          <SuperAdmin 
+            tenants={tenants} 
+            setTenants={setTenants} 
+            currentTab={activeTab} 
+            setCurrentTab={setActiveTab} 
+          />
         )}
       </div>
     </div>

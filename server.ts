@@ -18,7 +18,8 @@ import {
   MetaTemplate, 
   AuditLog, 
   Chatbot, 
-  Deal 
+  Deal,
+  TenantMetaConfig
 } from "./src/types";
 
 // Load environment variables
@@ -42,10 +43,10 @@ const ai = new GoogleGenAI({
 
 // Mock Database State (in-memory) to simulate a full database
 const TENANTS: Tenant[] = [
-  { id: "tenant-alpha", name: "Alpha Logistics Inc", domain: "alpha.logistics.com", plan: "pro" as const, status: "active" as const, createdAt: "2026-01-10", whatsappLimit: 100000, aiCredits: 5000, aiUsed: 1240, phoneNumbersCount: 2, maxUsersCount: 15, internalChatEnabled: true },
-  { id: "tenant-beta", name: "Beta Retail Co", domain: "beta.shop.com", plan: "growth" as const, status: "active" as const, createdAt: "2026-02-15", whatsappLimit: 10000, aiCredits: 1000, aiUsed: 950, phoneNumbersCount: 1, maxUsersCount: 5, internalChatEnabled: false },
-  { id: "tenant-gamma", name: "Gamma Health Clinic", domain: "gamma.health.org", plan: "enterprise" as const, status: "active" as const, createdAt: "2026-03-01", whatsappLimit: 500000, aiCredits: 20000, aiUsed: 4320, phoneNumbersCount: 3, maxUsersCount: 50, internalChatEnabled: true },
-  { id: "tenant-delta", name: "Delta Real Estate", domain: "delta.realestate.com", plan: "growth" as const, status: "suspended" as const, createdAt: "2026-04-12", whatsappLimit: 10000, aiCredits: 1000, aiUsed: 220, phoneNumbersCount: 1, maxUsersCount: 5, internalChatEnabled: false }
+  { id: "tenant-alpha", name: "Alpha Logistics Inc", domain: "alpha.logistics.com", plan: "pro" as const, status: "active" as const, createdAt: "2026-01-10", whatsappLimit: 100000, aiCredits: 5000, aiUsed: 1240, phoneNumbersCount: 2, maxUsersCount: 15, internalChatEnabled: true, allowedFeatures: ["live_inbox", "internal_chat", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing", "open_api"] },
+  { id: "tenant-beta", name: "Beta Retail Co", domain: "beta.shop.com", plan: "growth" as const, status: "active" as const, createdAt: "2026-02-15", whatsappLimit: 10000, aiCredits: 1000, aiUsed: 950, phoneNumbersCount: 1, maxUsersCount: 5, internalChatEnabled: false, allowedFeatures: ["live_inbox", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation"] },
+  { id: "tenant-gamma", name: "Gamma Health Clinic", domain: "gamma.health.org", plan: "enterprise" as const, status: "active" as const, createdAt: "2026-03-01", whatsappLimit: 500000, aiCredits: 20000, aiUsed: 4320, phoneNumbersCount: 3, maxUsersCount: 50, internalChatEnabled: true, allowedFeatures: ["live_inbox", "internal_chat", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing", "open_api"] },
+  { id: "tenant-delta", name: "Delta Real Estate", domain: "delta.realestate.com", plan: "growth" as const, status: "suspended" as const, createdAt: "2026-04-12", whatsappLimit: 10000, aiCredits: 1000, aiUsed: 220, phoneNumbersCount: 1, maxUsersCount: 5, internalChatEnabled: false, allowedFeatures: ["live_inbox", "message_router", "campaigns", "templates", "chatbot_builder"] }
 ];
 
 const PHONE_NUMBERS: WhatsAppPhoneNumber[] = [
@@ -219,27 +220,45 @@ app.get("/api/admin/tenants", (req, res) => {
   res.json(TENANTS);
 });
 
+app.get("/api/admin/audit-logs", (req, res) => {
+  res.json(AUDIT_LOGS);
+});
+
 app.post("/api/admin/tenants", (req, res) => {
-  const { name, domain, plan, whatsappLimit, aiCredits, maxUsersCount, internalChatEnabled } = req.body;
+  const { name, domain, plan, whatsappLimit, aiCredits, maxUsersCount, internalChatEnabled, allowedFeatures } = req.body;
   if (!name || !domain) {
     return res.status(400).json({ error: "Name and Domain are required fields" });
   }
   const defaultMaxUsers = plan === "enterprise" ? 50 : plan === "pro" ? 15 : 5;
-  const newTenant = {
+  const newTenant: Tenant = {
     id: `tenant-${name.toLowerCase().replace(/[^a-z0-9]/g, "-")}`,
     name,
     domain,
     plan: plan || "growth",
     status: "active" as const,
     createdAt: new Date().toISOString().split("T")[0],
-    whatsappLimit: whatsappLimit || 10000,
-    aiCredits: aiCredits || 1000,
+    whatsappLimit: whatsappLimit ? parseInt(whatsappLimit) : 10000,
+    aiCredits: aiCredits ? parseInt(aiCredits) : 1000,
     aiUsed: 0,
     phoneNumbersCount: 0,
     maxUsersCount: maxUsersCount !== undefined ? parseInt(maxUsersCount) : defaultMaxUsers,
-    internalChatEnabled: internalChatEnabled !== false
+    internalChatEnabled: internalChatEnabled !== false,
+    allowedFeatures: allowedFeatures || ["live_inbox", "internal_chat", "message_router", "campaigns", "templates", "chatbot_builder", "crm", "flows_automation", "billing"]
   };
   TENANTS.push(newTenant);
+
+  // Add an audit log entry for this creation
+  AUDIT_LOGS.unshift({
+    id: `log-${Date.now()}`,
+    tenantId: newTenant.id,
+    userId: "super-admin-root",
+    userName: "Super Admin",
+    action: "WORKSPACE_CREATED",
+    details: `Provisioned new workspace '${newTenant.name}' with plan '${newTenant.plan}'`,
+    ipAddress: "127.0.0.1",
+    timestamp: new Date().toISOString()
+  });
+
   res.status(201).json(newTenant);
 });
 
@@ -258,8 +277,452 @@ app.patch("/api/admin/tenants/:id", (req, res) => {
   if (req.body.aiCredits !== undefined) tenant.aiCredits = req.body.aiCredits;
   if (req.body.maxUsersCount !== undefined) tenant.maxUsersCount = parseInt(req.body.maxUsersCount);
   if (req.body.internalChatEnabled !== undefined) tenant.internalChatEnabled = req.body.internalChatEnabled;
+  if (req.body.allowedFeatures !== undefined) tenant.allowedFeatures = req.body.allowedFeatures;
 
   res.json(tenant);
+});
+
+// --- META EMBEDDED SIGNUP & MULTI-TENANCY ENDPOINTS ---
+const META_CONFIGS: TenantMetaConfig[] = [
+  {
+    tenantId: "tenant-alpha",
+    appId: "938210349281034",
+    appSecret: "a9c3d4f5e6a7b8c9d0e1f2a3b4c5d6e7",
+    systemUserToken: "EAAGzoPZB1ZC5kBALuN8ZCWuO3747rJp8CgZAtZAhWf3TfXvTstDbeC4MreQhOa6hFf8O7K7XvN",
+    webhookVerifyToken: "verify_token_alpha_12345",
+    webhookUrl: "https://bouuz.io/api/webhooks/whatsapp",
+    isConfigured: true
+  },
+  {
+    tenantId: "tenant-beta",
+    appId: "284910394810293",
+    appSecret: "d4c5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
+    systemUserToken: "EAAGzoPZB1ZC5kBAPp9ZCDqRStmZCOvIeZCPT7rYxZAdC8qJ0O5PclZAsv5Wf9Vf1Qh9W7T",
+    webhookVerifyToken: "verify_token_beta_98765",
+    webhookUrl: "https://bouuz.io/api/webhooks/whatsapp",
+    isConfigured: true
+  }
+];
+
+app.get("/api/tenants/:tenantId/meta-config", (req, res) => {
+  const { tenantId } = req.params;
+  let config = META_CONFIGS.find(c => c.tenantId === tenantId);
+  if (!config) {
+    config = {
+      tenantId,
+      appId: "",
+      appSecret: "",
+      systemUserToken: "",
+      webhookVerifyToken: `verify_${tenantId}_${Math.random().toString(36).substring(7)}`,
+      webhookUrl: `https://bouuz.io/api/webhooks/whatsapp`,
+      isConfigured: false
+    };
+    META_CONFIGS.push(config);
+  }
+  res.json(config);
+});
+
+app.post("/api/tenants/:tenantId/meta-config", (req, res) => {
+  const { tenantId } = req.params;
+  const { appId, appSecret, systemUserToken, webhookVerifyToken } = req.body;
+  
+  let config = META_CONFIGS.find(c => c.tenantId === tenantId);
+  if (!config) {
+    config = {
+      tenantId,
+      appId: "",
+      appSecret: "",
+      systemUserToken: "",
+      webhookVerifyToken: "",
+      webhookUrl: "https://bouuz.io/api/webhooks/whatsapp",
+      isConfigured: false
+    };
+    META_CONFIGS.push(config);
+  }
+
+  config.appId = appId || "";
+  config.appSecret = appSecret || "";
+  config.systemUserToken = systemUserToken || "";
+  if (webhookVerifyToken) config.webhookVerifyToken = webhookVerifyToken;
+  config.isConfigured = !!(config.appId && config.systemUserToken);
+
+  // Unshift to Audit Log
+  AUDIT_LOGS.unshift({
+    id: `log-${Date.now()}`,
+    tenantId,
+    userId: "tenant-admin-sys",
+    userName: "System Administrator",
+    action: "META_CONFIG_UPDATE",
+    details: `Updated Meta App Connection configurations (App ID: ${config.appId})`,
+    ipAddress: req.ip || "127.0.0.1",
+    timestamp: new Date().toISOString()
+  });
+
+  res.json(config);
+});
+
+app.post("/api/tenants/:tenantId/embedded-signup", (req, res) => {
+  const { tenantId } = req.params;
+  const { phoneNumber, displayPhoneNumber, verifiedName, wabaId, phoneId, limitCategory } = req.body;
+
+  if (!phoneNumber || !verifiedName) {
+    return res.status(400).json({ error: "Phone number and verified name are required." });
+  }
+
+  // Create new WhatsAppPhoneNumber item
+  const newPhoneId = phoneId || `phone-${Date.now()}`;
+  const newPhone: WhatsAppPhoneNumber = {
+    id: newPhoneId,
+    tenantId,
+    phoneNumber,
+    displayPhoneNumber: displayPhoneNumber || phoneNumber,
+    verifiedName,
+    status: "connected",
+    qualityRating: "green",
+    limitCategory: limitCategory || "tier1"
+  };
+
+  PHONE_NUMBERS.push(newPhone);
+
+  // Update tenant's phone numbers count
+  const tenant = TENANTS.find(t => t.id === tenantId);
+  if (tenant) {
+    tenant.phoneNumbersCount = PHONE_NUMBERS.filter(p => p.tenantId === tenantId).length;
+  }
+
+  // Add System Audit log
+  AUDIT_LOGS.unshift({
+    id: `log-${Date.now()}`,
+    tenantId,
+    userId: "tenant-admin-sys",
+    userName: "Meta Embedded Signup",
+    action: "WHATSAPP_CONNECT",
+    details: `Successfully registered & verified WhatsApp number ${phoneNumber} (${verifiedName}) with WABA ${wabaId || "N/A"}. Subscribed webhooks to v20.0.`,
+    ipAddress: req.ip || "127.0.0.1",
+    timestamp: new Date().toISOString()
+  });
+
+  res.status(201).json(newPhone);
+});
+
+// --- OPEN-SOURCE API & INTEGRATION ENDPOINTS ---
+interface OpenApiConfig {
+  tenantId: string;
+  apiKey: string;
+  webhookUrl: string;
+  webhookSecret: string;
+  isEnabled: boolean;
+  events: string[];
+}
+
+const OPEN_API_CONFIGS: OpenApiConfig[] = [
+  {
+    tenantId: "tenant-alpha",
+    apiKey: "sk_live_alpha_1a2b3c4d5e6f7g8h9i0j",
+    webhookUrl: "https://crm.alpha-logistics.com/webhooks/bouuz",
+    webhookSecret: "whsec_alpha_987654321",
+    isEnabled: true,
+    events: ["message.received", "message.sent", "contact.created"]
+  },
+  {
+    tenantId: "tenant-gamma",
+    apiKey: "sk_live_gamma_9h8g7f6e5d4c3b2a1z0y",
+    webhookUrl: "https://api.gammahealth.org/integrations/whatsapp",
+    webhookSecret: "whsec_gamma_123456789",
+    isEnabled: true,
+    events: ["message.received", "contact.created"]
+  }
+];
+
+// Helper to find or init open api config
+function getOrCreateOpenApiConfig(tenantId: string): OpenApiConfig {
+  let config = OPEN_API_CONFIGS.find(c => c.tenantId === tenantId);
+  if (!config) {
+    config = {
+      tenantId,
+      apiKey: "", // Initially empty until generated
+      webhookUrl: "",
+      webhookSecret: `whsec_${tenantId}_${Math.random().toString(36).substring(2, 11)}`,
+      isEnabled: false,
+      events: ["message.received", "message.sent"]
+    };
+    OPEN_API_CONFIGS.push(config);
+  }
+  return config;
+}
+
+// 1. Get Open API configuration for a tenant
+app.get("/api/tenants/:tenantId/open-api", (req, res) => {
+  const { tenantId } = req.params;
+  const config = getOrCreateOpenApiConfig(tenantId);
+  res.json(config);
+});
+
+// 2. Generate / Roll API Key
+app.post("/api/tenants/:tenantId/open-api/key", (req, res) => {
+  const { tenantId } = req.params;
+  const config = getOrCreateOpenApiConfig(tenantId);
+  
+  const randomHex = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  const cleanId = tenantId.replace("tenant-", "");
+  config.apiKey = `sk_live_${cleanId}_${randomHex.substring(0, 24)}`;
+  config.isEnabled = true;
+
+  // Log in Audit Logs
+  AUDIT_LOGS.unshift({
+    id: `log-${Date.now()}`,
+    tenantId,
+    userId: "tenant-admin-sys",
+    userName: "System Admin",
+    action: "API_KEY_GENERATE",
+    details: "Generated a new secure live API secret token for CRM/external integrations.",
+    ipAddress: req.ip || "127.0.0.1",
+    timestamp: new Date().toISOString()
+  });
+
+  res.json({ apiKey: config.apiKey, isEnabled: config.isEnabled });
+});
+
+// 3. Update Webhook Settings
+app.post("/api/tenants/:tenantId/open-api/webhook", (req, res) => {
+  const { tenantId } = req.params;
+  const { webhookUrl, isEnabled, events } = req.body;
+  const config = getOrCreateOpenApiConfig(tenantId);
+
+  config.webhookUrl = webhookUrl || "";
+  if (isEnabled !== undefined) config.isEnabled = isEnabled;
+  if (events !== undefined) config.events = events;
+
+  AUDIT_LOGS.unshift({
+    id: `log-${Date.now()}`,
+    tenantId,
+    userId: "tenant-admin-sys",
+    userName: "System Admin",
+    action: "API_WEBHOOK_UPDATE",
+    details: `Updated API webhook delivery parameters. Destination: ${config.webhookUrl || "None"}`,
+    ipAddress: req.ip || "127.0.0.1",
+    timestamp: new Date().toISOString()
+  });
+
+  res.json(config);
+});
+
+// 4. Test Webhook Connection (with real HTTP call and mock fallbacks)
+app.post("/api/tenants/:tenantId/open-api/test-webhook", async (req, res) => {
+  const { tenantId } = req.params;
+  const config = getOrCreateOpenApiConfig(tenantId);
+
+  if (!config.webhookUrl) {
+    return res.status(400).json({ error: "No webhook delivery URL is configured for testing." });
+  }
+
+  const payload = {
+    event: "message.received",
+    timestamp: new Date().toISOString(),
+    tenantId,
+    data: {
+      messageId: `msg_${Math.random().toString(36).substring(2, 10)}`,
+      sender: "+14155551234",
+      senderName: "Test Lead (OpenAPI)",
+      text: "Hello! This is a real-time webhook payload delivered from the BouuZ developer network.",
+      mediaUrl: null
+    }
+  };
+
+  try {
+    const response = await fetch(config.webhookUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-BouuZ-Signature": config.webhookSecret,
+        "User-Agent": "BouuZ-Webhook-Service/1.0"
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(5000) // 5s timeout
+    });
+
+    const responseText = await response.text();
+    res.json({
+      success: true,
+      statusCode: response.status,
+      statusText: response.statusText,
+      responseBody: responseText.substring(0, 1000) // limit size
+    });
+  } catch (err: any) {
+    res.json({
+      success: false,
+      error: err.message || "Connection timed out or host unreachable. Check your URL address.",
+      simulatedFallback: true,
+      simulationPayload: payload
+    });
+  }
+});
+
+// --- OPEN API (v1) DEVELOPER INTEGRATION ENDPOINTS ---
+// Middleware to authenticate via Bearer API Key
+const authenticateApiKey = (req: any, res: any, next: any) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized. Missing or malformed Bearer token in Authorization header." });
+  }
+
+  const token = authHeader.split(" ")[1];
+  const config = OPEN_API_CONFIGS.find(c => c.apiKey === token);
+  
+  if (!config) {
+    return res.status(401).json({ error: "Unauthorized. The provided API key is invalid or has been revoked." });
+  }
+
+  const tenant = TENANTS.find(t => t.id === config.tenantId);
+  if (!tenant || tenant.status !== "active") {
+    return res.status(403).json({ error: "Forbidden. This tenant account is suspended or currently inactive." });
+  }
+
+  if (tenant.allowedFeatures && !tenant.allowedFeatures.includes("open_api")) {
+    return res.status(403).json({ error: "Forbidden. The Open API option is disabled for this tenant. Contact Super Admin." });
+  }
+
+  req.tenantId = config.tenantId;
+  req.apiConfig = config;
+  next();
+};
+
+// 1. GET /api/v1/chats - List all tenant inbox chats
+app.get("/api/v1/chats", authenticateApiKey, (req: any, res) => {
+  const tenantChats = CHATS.filter(c => c.tenantId === req.tenantId);
+  res.json({
+    object: "list",
+    data: tenantChats,
+    count: tenantChats.length
+  });
+});
+
+// 2. GET /api/v1/contacts - List all contacts
+app.get("/api/v1/contacts", authenticateApiKey, (req: any, res) => {
+  const tenantContacts = CONTACTS.filter(c => c.tenantId === req.tenantId);
+  res.json({
+    object: "list",
+    data: tenantContacts,
+    count: tenantContacts.length
+  });
+});
+
+// 3. POST /api/v1/contacts - Create or sync contact from CRM
+app.post("/api/v1/contacts", authenticateApiKey, (req: any, res) => {
+  const { name, phoneNumber, email, tags, customFields } = req.body;
+  if (!name || !phoneNumber) {
+    return res.status(400).json({ error: "Missing required properties: 'name' and 'phoneNumber' are required." });
+  }
+
+  let contact = CONTACTS.find(c => c.tenantId === req.tenantId && c.phoneNumber === phoneNumber);
+  if (contact) {
+    // Update existing contact
+    contact.name = name;
+    if (email !== undefined) contact.email = email;
+    if (tags !== undefined) contact.tags = Array.from(new Set([...contact.tags, ...tags]));
+    if (customFields !== undefined) contact.customFields = { ...contact.customFields, ...customFields };
+  } else {
+    // Create new contact
+    contact = {
+      id: `c-${Date.now()}`,
+      tenantId: req.tenantId,
+      name,
+      phoneNumber,
+      email,
+      tags: tags || [],
+      customFields: customFields || {},
+      createdAt: new Date().toISOString().split("T")[0],
+      segments: []
+    };
+    CONTACTS.push(contact);
+
+    // Register a system log
+    AUDIT_LOGS.unshift({
+      id: `log-${Date.now()}`,
+      tenantId: req.tenantId,
+      userId: "api-sync",
+      userName: "External API Integration",
+      action: "CONTACT_SYNCED",
+      details: `Synced and registered new contact '${name}' via external API.`,
+      ipAddress: req.ip || "127.0.0.1",
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  res.json({
+    object: "contact",
+    data: contact,
+    status: "synced"
+  });
+});
+
+// 4. POST /api/v1/messages/send - Programmatically send a message
+app.post("/api/v1/messages/send", authenticateApiKey, (req: any, res) => {
+  const { recipientPhone, text, mediaUrl } = req.body;
+  if (!recipientPhone || !text) {
+    return res.status(400).json({ error: "Missing required properties: 'recipientPhone' and 'text' are required." });
+  }
+
+  // Find or create chat
+  let chat = CHATS.find(c => c.tenantId === req.tenantId && c.customerPhone === recipientPhone);
+  if (!chat) {
+    // Find contact or create one
+    let contact = CONTACTS.find(c => c.tenantId === req.tenantId && c.phoneNumber === recipientPhone);
+    const customerName = contact ? contact.name : `Lead ${recipientPhone}`;
+    
+    chat = {
+      id: `chat-${Date.now()}`,
+      tenantId: req.tenantId,
+      customerName,
+      customerPhone: recipientPhone,
+      status: "open",
+      labels: ["API-Ingress"],
+      lastMessageText: text,
+      lastMessageTime: new Date().toISOString(),
+      unreadCount: 0,
+      sentiment: "neutral"
+    };
+    CHATS.push(chat);
+  }
+
+  // Create & Append message
+  const newMessage = {
+    id: `msg-${Date.now()}`,
+    chatId: chat.id,
+    sender: "agent" as const,
+    senderName: "Developer API (Automated)",
+    text,
+    mediaUrl,
+    status: "sent" as const,
+    timestamp: new Date().toISOString()
+  };
+
+  // Import or fetch existing message state
+  const MESSAGES = (global as any).MESSAGES || [];
+  MESSAGES.push(newMessage);
+  (global as any).MESSAGES = MESSAGES;
+
+  // Update chat state
+  chat.lastMessageText = text;
+  chat.lastMessageTime = new Date().toISOString();
+
+  // Audit Logs
+  AUDIT_LOGS.unshift({
+    id: `log-${Date.now()}`,
+    tenantId: req.tenantId,
+    userId: "api-sync",
+    userName: "External API Integration",
+    action: "MESSAGE_SENT_API",
+    details: `Successfully dispatched automated message to ${recipientPhone} via developer API.`,
+    ipAddress: req.ip || "127.0.0.1",
+    timestamp: new Date().toISOString()
+  });
+
+  res.json({
+    object: "message",
+    data: newMessage,
+    status: "queued"
+  });
 });
 
 // --- INTERNAL CHAT ENDPOINTS ---
@@ -272,6 +735,8 @@ interface InternalMessage {
   receiverId: string; // user ID or "all" for general group
   text: string;
   timestamp: string;
+  mediaUrl?: string;
+  mediaType?: string;
 }
 
 const INTERNAL_MESSAGES: InternalMessage[] = [
@@ -305,10 +770,10 @@ app.get("/api/internal-messages/:tenantId", (req, res) => {
 
 app.post("/api/internal-messages/:tenantId", (req, res) => {
   const { tenantId } = req.params;
-  const { senderId, senderName, senderRole, receiverId, text } = req.body;
+  const { senderId, senderName, senderRole, receiverId, text, mediaUrl, mediaType } = req.body;
 
-  if (!senderId || !senderName || !receiverId || !text) {
-    return res.status(400).json({ error: "Missing required sender, receiver, or text fields" });
+  if (!senderId || !senderName || !receiverId) {
+    return res.status(400).json({ error: "Missing required sender, receiver fields" });
   }
 
   const newMessage: InternalMessage = {
@@ -318,8 +783,10 @@ app.post("/api/internal-messages/:tenantId", (req, res) => {
     senderName,
     senderRole: senderRole || "agent",
     receiverId,
-    text,
-    timestamp: new Date().toISOString()
+    text: text || "",
+    timestamp: new Date().toISOString(),
+    mediaUrl,
+    mediaType
   };
 
   INTERNAL_MESSAGES.push(newMessage);
@@ -1022,6 +1489,12 @@ app.post("/api/routing-rules/simulate/:tenantId", async (req, res) => {
     traceSteps,
     chatId
   });
+});
+
+
+// Catch-all for non-matching API routes to prevent HTML index.html fallback
+app.all("/api/*", (req, res) => {
+  res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
 });
 
 

@@ -57,6 +57,7 @@ export default function MessageRouter({ tenantId }: MessageRouterProps) {
   } | null>(null);
 
   const fetchRules = () => {
+    if (!tenantId) return;
     setLoading(true);
     fetch(`/api/routing-rules/${tenantId}`)
       .then(res => res.json())

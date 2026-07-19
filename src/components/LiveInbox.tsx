@@ -27,7 +27,8 @@ import {
   ThumbsDown,
   Info,
   Loader2,
-  ChevronLeft
+  ChevronLeft,
+  X
 } from "lucide-react";
 import { Chat, Message } from "../types";
 
@@ -43,6 +44,10 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedLabelFilter, setSelectedLabelFilter] = useState<string>("all");
   const [availableLabels, setAvailableLabels] = useState<any[]>([]);
+
+  // File Attachment State
+  const [attachedFile, setAttachedFile] = useState<{ name: string; size: number; type: string; url: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // AI State
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -69,6 +74,7 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
 
   // Fetch chats for tenant
   const fetchChats = () => {
+    if (!tenantId) return;
     fetch(`/api/chats/${tenantId}`)
       .then(res => res.json())
       .then(data => {
@@ -166,6 +172,26 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
       .catch(err => console.error("Error updating labels:", err));
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setAttachedFile({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: url
+      });
+    }
+  };
+
+  const clearAttachedFile = () => {
+    setAttachedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   // Fetch messages when selected chat changes
   useEffect(() => {
     if (selectedChat) {
@@ -195,15 +221,17 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
   // Send message
   const handleSendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputText.trim() || !selectedChat) return;
+    const hasText = !!inputText.trim();
+    const hasFile = !!attachedFile;
+    if ((!hasText && !hasFile) || !selectedChat) return;
 
     const payload = {
       chatId: selectedChat.id,
-      text: inputText,
+      text: inputText.trim() || (attachedFile ? `Attached File: ${attachedFile.name}` : ""),
       sender: isPrivateNote ? "system" : "agent",
       senderName: isPrivateNote ? "Private Note" : "Agent Alice",
-      mediaUrl: undefined,
-      mediaType: undefined
+      mediaUrl: attachedFile ? attachedFile.url : undefined,
+      mediaType: attachedFile ? (attachedFile.type.startsWith("image/") ? "image" : "document") : undefined
     };
 
     fetch("/api/chats/messages", {
@@ -215,6 +243,7 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
       .then(newMsg => {
         setMessages(prev => [...prev, newMsg]);
         setInputText("");
+        clearAttachedFile();
         scrollToBottom();
         
         // Update local chats list
@@ -508,10 +537,11 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
                 <button
                   type="button"
                   onClick={() => setShowRightPanel(!showRightPanel)}
-                  className="lg:hidden p-1.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-lg shrink-0 transition cursor-pointer"
-                  title="Toggle AI Insights"
+                  className="flex items-center gap-1.5 p-1.5 md:py-1.5 md:px-3 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-lg shrink-0 transition cursor-pointer text-xs font-semibold"
+                  title="Toggle AI Insights & Outcome Tags"
                 >
                   <Sparkles className="h-4 w-4 text-purple-600" />
+                  <span className="hidden md:inline">AI Copilot & Tags</span>
                 </button>
                 {!selectedChat.assignedTo ? (
                   <button
@@ -543,12 +573,37 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
                 
                 if (isPrivate) {
                   return (
-                    <div key={m.id} className="flex justify-center my-2">
-                      <div className="bg-amber-50 border border-amber-200/60 rounded-lg p-3 text-xs text-amber-850 max-w-lg shadow-sm">
-                        <p className="font-semibold mb-1 flex items-center gap-1.5">
+                    <div key={m.id} className="flex justify-center my-2 w-full">
+                      <div className="bg-amber-50 border border-amber-200/60 rounded-lg p-3 text-xs text-amber-800 max-w-lg shadow-sm w-full">
+                        <p className="font-semibold mb-1 flex items-center gap-1.5 text-amber-900">
                           <Clock className="h-3.5 w-3.5 text-amber-500" /> Internal Staff Note:
                         </p>
-                        {m.text}
+                        {m.mediaUrl && (
+                          <div className="mb-2 rounded-lg overflow-hidden border border-amber-200/50 bg-amber-100/30 p-1 w-fit">
+                            {m.mediaType === "image" ? (
+                              <img
+                                src={m.mediaUrl}
+                                alt={m.text || "Attachment"}
+                                className="max-w-full max-h-48 rounded object-cover cursor-pointer hover:opacity-90 transition"
+                                referrerPolicy="no-referrer"
+                                onClick={() => window.open(m.mediaUrl, "_blank")}
+                              />
+                            ) : (
+                              <a
+                                href={m.mediaUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-1.5 text-[11px] text-amber-900 hover:underline font-medium py-1 px-1.5"
+                              >
+                                <Paperclip className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                                <span className="underline truncate max-w-[180px]">
+                                  Download File
+                                </span>
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        <p className="whitespace-pre-wrap">{m.text}</p>
                       </div>
                     </div>
                   );
@@ -567,6 +622,31 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
                       }`}
                     >
                       <p className="font-bold opacity-60 text-[10px] mb-1">{m.senderName}</p>
+                      {m.mediaUrl && (
+                        <div className="mb-2 rounded-lg overflow-hidden border border-slate-100 bg-slate-50/80 p-1 w-fit">
+                          {m.mediaType === "image" ? (
+                            <img
+                              src={m.mediaUrl}
+                              alt={m.text || "Attachment"}
+                              className="max-w-full max-h-48 rounded object-cover cursor-pointer hover:opacity-90 transition"
+                              referrerPolicy="no-referrer"
+                              onClick={() => window.open(m.mediaUrl, "_blank")}
+                            />
+                          ) : (
+                            <a
+                              href={m.mediaUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1.5 text-[11px] text-blue-600 hover:text-blue-800 font-medium py-1 px-1.5"
+                            >
+                              <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                              <span className="underline truncate max-w-[180px]">
+                                Download File
+                              </span>
+                            </a>
+                          )}
+                        </div>
+                      )}
                       <p className="text-xs leading-relaxed whitespace-pre-wrap">{m.text}</p>
                       <div className={`flex items-center justify-end gap-1 text-[9px] mt-1.5 ${isCustomer ? "text-slate-400" : "text-emerald-100"}`}>
                         <span>
@@ -613,6 +693,13 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
 
               {/* Main message composing form */}
               <form onSubmit={handleSendMessage} className="space-y-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+
                 <div className="flex items-center justify-between">
                   <div className="flex gap-1.5">
                     <button
@@ -632,10 +719,33 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
                   </span>
                 </div>
 
+                {attachedFile && (
+                  <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-700 animate-fadeIn">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <Paperclip className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      <span className="font-medium truncate max-w-[200px]">{attachedFile.name}</span>
+                      <span className="text-[10px] text-slate-400">({(attachedFile.size / 1024).toFixed(1)} KB)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearAttachedFile}
+                      className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-rose-600 transition"
+                      title="Clear attachment"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex gap-2.5">
                   <button
                     type="button"
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-600 p-2.5 rounded-lg border border-slate-200 shrink-0"
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`p-2.5 rounded-lg border shrink-0 transition ${
+                      attachedFile 
+                        ? "bg-emerald-50 border-emerald-300 text-emerald-600" 
+                        : "bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600"
+                    }`}
                     title="Add Attachment"
                   >
                     <Paperclip className="h-4 w-4" />
@@ -672,15 +782,15 @@ export default function LiveInbox({ tenantId }: LiveInboxProps) {
 
       {/* RIGHT PANEL: AI Copilot Assistant Panel */}
       {showRightPanel && selectedChat && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-20 lg:hidden" onClick={() => setShowRightPanel(false)} />
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 transition-opacity" onClick={() => setShowRightPanel(false)} />
       )}
 
       {selectedChat && (
-        <div className={`fixed inset-y-0 right-0 z-30 w-80 bg-white border-l border-slate-200 flex flex-col h-full shrink-0 overflow-y-auto p-4 space-y-6 shadow-2xl lg:shadow-none transition-all duration-300 lg:relative lg:translate-x-0 ${showRightPanel ? "translate-x-0" : "translate-x-full lg:translate-x-0"}`}>
-          <div className="flex items-center justify-between lg:hidden border-b border-slate-100 pb-2.5">
+        <div className={`fixed inset-y-0 right-0 z-50 w-80 bg-white border-l border-slate-200 flex flex-col h-full shrink-0 overflow-y-auto p-4 space-y-6 shadow-2xl transition-all duration-300 ${showRightPanel ? "translate-x-0" : "translate-x-full"}`}>
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
             <span className="font-bold text-xs text-slate-800 flex items-center gap-1">
               <Sparkles className="h-3.5 w-3.5 text-purple-600" />
-              <span>AI Copilot Insights</span>
+              <span>AI Copilot & Tags</span>
             </span>
             <button 
               onClick={() => setShowRightPanel(false)} 

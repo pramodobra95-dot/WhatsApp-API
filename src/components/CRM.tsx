@@ -40,6 +40,7 @@ export default function CRM({ tenantId }: CRMProps) {
   const [toastMessage, setToastMessage] = useState("");
 
   const fetchDeals = () => {
+    if (!tenantId) return;
     setLoading(true);
     fetch(`/api/deals/${tenantId}`)
       .then(res => res.json())

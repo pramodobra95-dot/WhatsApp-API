@@ -46,6 +46,7 @@ export default function ChatbotBuilder({ tenantId }: ChatbotBuilderProps) {
   const [simInput, setSimInput] = useState("");
 
   const fetchBots = () => {
+    if (!tenantId) return;
     fetch(`/api/chatbots/${tenantId}`)
       .then(res => res.json())
       .then(data => {

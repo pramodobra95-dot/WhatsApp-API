@@ -15,7 +15,9 @@ import {
   RefreshCw, 
   Search,
   ChevronLeft,
-  Briefcase
+  Briefcase,
+  Paperclip,
+  X
 } from "lucide-react";
 import { StaffMember } from "./StaffPermissions";
 
@@ -39,6 +41,8 @@ interface InternalMessage {
   receiverId: string;
   text: string;
   timestamp: string;
+  mediaUrl?: string;
+  mediaType?: string;
 }
 
 export default function InternalChat({ tenantId, currentUser, internalChatEnabled }: InternalChatProps) {
@@ -50,22 +54,55 @@ export default function InternalChat({ tenantId, currentUser, internalChatEnable
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
+  // Attachment State
+  const [attachedFile, setAttachedFile] = useState<{ name: string; size: number; type: string; url: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Responsive state
   const [showChannelList, setShowChannelList] = useState(true);
 
   const messageEndRef = useRef<HTMLDivElement>(null);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setAttachedFile({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: url
+      });
+    }
+  };
+
+  const clearAttachedFile = () => {
+    setAttachedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const fetchMessages = () => {
-    if (!internalChatEnabled) return;
+    if (!internalChatEnabled || !tenantId || tenantId === "undefined") return;
     
     fetch(`/api/internal-messages/${tenantId}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`Server status ${res.status}`);
+        }
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          return res.json();
+        }
+        throw new Error("Response was not JSON");
+      })
       .then(data => {
         setMessages(data);
         setLoading(false);
       })
       .catch(err => {
-        console.error("Failed to load team messages:", err);
+        console.error("Failed to load team messages:", err.message || err);
         setLoading(false);
       });
   };
@@ -95,7 +132,8 @@ export default function InternalChat({ tenantId, currentUser, internalChatEnable
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanText = inputText.trim();
-    if (!cleanText || sending) return;
+    const hasFile = !!attachedFile;
+    if ((!cleanText && !hasFile) || sending) return;
 
     setSending(true);
     fetch(`/api/internal-messages/${tenantId}`, {
@@ -106,13 +144,16 @@ export default function InternalChat({ tenantId, currentUser, internalChatEnable
         senderName: currentUser.name,
         senderRole: currentUser.role,
         receiverId: selectedReceiverId,
-        text: cleanText
+        text: cleanText || (attachedFile ? `Shared file: ${attachedFile.name}` : ""),
+        mediaUrl: attachedFile ? attachedFile.url : undefined,
+        mediaType: attachedFile ? (attachedFile.type.startsWith("image/") ? "image" : "document") : undefined
       })
     })
       .then(res => res.json())
       .then(newMsg => {
         setMessages(prev => [...prev, newMsg]);
         setInputText("");
+        clearAttachedFile();
         setSending(false);
       })
       .catch(err => {
@@ -313,6 +354,31 @@ export default function InternalChat({ tenantId, currentUser, internalChatEnable
                         : "bg-white text-slate-800 rounded-tl-none border border-slate-200"
                     }`}
                   >
+                    {m.mediaUrl && (
+                      <div className="mb-2 rounded overflow-hidden border border-slate-100 bg-slate-50/80 p-1 w-fit">
+                        {m.mediaType === "image" ? (
+                          <img
+                            src={m.mediaUrl}
+                            alt={m.text || "Attachment"}
+                            className="max-w-full max-h-48 rounded object-cover cursor-pointer hover:opacity-90 transition"
+                            referrerPolicy="no-referrer"
+                            onClick={() => window.open(m.mediaUrl, "_blank")}
+                          />
+                        ) : (
+                          <a
+                            href={m.mediaUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 text-[11px] text-blue-600 hover:text-blue-800 font-medium py-1 px-1.5"
+                          >
+                            <Paperclip className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+                            <span className="underline truncate max-w-[180px]">
+                              Download File
+                            </span>
+                          </a>
+                        )}
+                      </div>
+                    )}
                     <p>{m.text}</p>
                     <span className={`block text-[9px] mt-1.5 text-right opacity-60 font-mono`}>
                       {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -337,27 +403,68 @@ export default function InternalChat({ tenantId, currentUser, internalChatEnable
 
         {/* Reply composing panel */}
         <div className="p-4 bg-white border-t border-slate-200 shrink-0">
-          <form onSubmit={handleSendMessage} className="flex gap-2">
-            <textarea
-              rows={1}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder={`Send message to ${selectedReceiverName}...`}
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-sans"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage(e);
-                }
-              }}
+          <form onSubmit={handleSendMessage} className="space-y-2">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
             />
-            <button
-              type="submit"
-              disabled={sending || !inputText.trim()}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 text-white p-2.5 rounded-xl shrink-0 self-end transition cursor-pointer"
-            >
-              <Send className="h-4 w-4" />
-            </button>
+
+            {attachedFile && (
+              <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-700 animate-fadeIn">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <Paperclip className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  <span className="font-medium truncate max-w-[200px]">{attachedFile.name}</span>
+                  <span className="text-[10px] text-slate-400">({(attachedFile.size / 1024).toFixed(1)} KB)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearAttachedFile}
+                  className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-rose-600 transition"
+                  title="Clear attachment"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={`p-2.5 rounded-xl border shrink-0 transition ${
+                  attachedFile 
+                    ? "bg-blue-50 border-blue-300 text-blue-600" 
+                    : "bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-600"
+                }`}
+                title="Add Attachment"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+
+              <textarea
+                rows={1}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder={`Send message to ${selectedReceiverName}...`}
+                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none font-sans"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e);
+                  }
+                }}
+              />
+
+              <button
+                type="submit"
+                disabled={sending || (!inputText.trim() && !attachedFile)}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 text-white p-2.5 rounded-xl shrink-0 self-end transition cursor-pointer"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
           </form>
         </div>
 

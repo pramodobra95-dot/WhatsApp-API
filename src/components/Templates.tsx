@@ -57,6 +57,7 @@ export default function Templates({ tenantId }: TemplatesProps) {
   const [toastMsg, setToastMsg] = useState("");
 
   const fetchTemplates = () => {
+    if (!tenantId) return;
     fetch(`/api/templates/${tenantId}`)
       .then(res => res.json())
       .then(data => {

@@ -50,6 +50,7 @@ export default function Campaigns({ tenantId }: CampaignsProps) {
   const [statusMessage, setStatusMessage] = useState("");
 
   const fetchData = () => {
+    if (!tenantId) return;
     // Fetch campaigns
     fetch(`/api/campaigns/${tenantId}`)
       .then(res => res.json())

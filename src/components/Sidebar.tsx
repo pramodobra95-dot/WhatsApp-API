@@ -22,7 +22,8 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  Menu
+  Menu,
+  Code
 } from "lucide-react";
 import { UserRole, Tenant } from "../types";
 
@@ -72,7 +73,10 @@ export default function Sidebar({
     { id: "crm", name: "CRM & Deals", icon: Briefcase },
     { id: "flows_automation", name: "Flows & Automations", icon: GitBranch, isSelectedTab: true },
     { id: "billing", name: "Billing & Plans", icon: CreditCard },
+    { id: "open_api", name: "Open API & CRM", icon: Code },
   ];
+
+  const selectedTenant = tenants.find(t => t.id === selectedTenantId) || tenants[0];
 
   // Admins get access to Staff & Permissions
   const tenantNavItems = [...baseNavItems];
@@ -81,8 +85,16 @@ export default function Sidebar({
     tenantNavItems.push({ id: "tenant_settings", name: "Custom Labels / Settings", icon: Settings, isSelectedTab: false });
   }
 
-  // Filter based on allowedPermissions for agent role
+  // Filter based on allowedPermissions for agent role and tenant-level features
   const filteredNavItems = tenantNavItems.filter(item => {
+    // If the selected tenant restricts this feature, hide it
+    if (selectedTenant && selectedTenant.allowedFeatures) {
+      const coreTabs = ["dashboard", "staff_permissions", "tenant_settings"];
+      if (!coreTabs.includes(item.id) && !selectedTenant.allowedFeatures.includes(item.id)) {
+        return false;
+      }
+    }
+    
     if (userRole === "super_admin" || userRole === "tenant_admin") return true;
     if (item.id === "dashboard") return true; // Always allow dashboard as baseline
     return allowedPermissions ? allowedPermissions.includes(item.id) : true;
@@ -94,8 +106,6 @@ export default function Sidebar({
     { id: "super_webhooks", name: "Webhook Logs", icon: Webhook },
   ];
 
-  const selectedTenant = tenants.find(t => t.id === selectedTenantId) || tenants[0];
-
   return (
     <div className={`bg-white border-r border-slate-200 flex flex-col h-screen shrink-0 font-sans text-slate-900 transition-all duration-300 ${isCollapsed ? "w-20" : "w-64"}`}>
       {/* Brand Logo & Controls */}
@@ -106,9 +116,12 @@ export default function Sidebar({
               <span className="text-white font-bold text-sm">B</span>
             </div>
             <div className="overflow-hidden">
-              <span className="font-bold text-base tracking-tight text-slate-950 block truncate">BouuZ</span>
+              <div className="flex items-center gap-1">
+                <span className="font-bold text-base tracking-tight text-slate-950 block truncate">BouuZ</span>
+                <span className="bg-emerald-500 text-white text-[8px] font-black px-1 rounded">AI</span>
+              </div>
               <div className="text-[9px] text-slate-500 font-medium leading-none mt-0.5 truncate">
-                Powered by <span className="text-blue-600 font-bold">BANT</span><span className="text-yellow-500 font-bold">Confirm</span>
+                Powered by <span className="text-blue-600 font-bold">BANT</span><span className="text-emerald-500 font-bold">Confirm</span>
               </div>
             </div>
           </div>
@@ -139,64 +152,7 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Tenant Switcher & Simulation Sandbox Controls */}
-      {!isCollapsed && (
-        <div className="px-3 py-3 border-b border-slate-100 shrink-0 bg-slate-50/50">
-          <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/60">
-            <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-              Active Tenant Account
-            </label>
-            <select
-              value={selectedTenantId}
-              onChange={(e) => {
-                setSelectedTenantId(e.target.value);
-                // reset tab if moving from super admin tab to tenant tab
-                if (currentTab.startsWith("super_")) {
-                  setCurrentTab("dashboard");
-                }
-              }}
-              className="w-full bg-white text-xs border border-slate-200 rounded-lg py-1 px-2 text-slate-800 focus:ring-1 focus:ring-emerald-500 focus:outline-none cursor-pointer font-medium"
-            >
-              {tenants.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.plan.toUpperCase()})
-                </option>
-              ))}
-            </select>
-
-            {/* Role Simulator */}
-            <div className="mt-2">
-              <label className="block text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Role Sandbox Simulator
-              </label>
-              <div className="flex gap-0.5 bg-white p-0.5 rounded-lg border border-slate-200/80">
-                {(["super_admin", "tenant_admin", "agent"] as UserRole[]).map((role) => (
-                  <button
-                    key={role}
-                    onClick={() => {
-                      setUserRole(role);
-                      if (role === "super_admin") {
-                        setCurrentTab("super_dashboard");
-                      } else {
-                        if (currentTab.startsWith("super_")) {
-                          setCurrentTab("dashboard");
-                        }
-                      }
-                    }}
-                    className={`flex-1 text-[8px] py-1 font-bold rounded-md capitalize transition-all ${
-                      userRole === role
-                        ? "bg-emerald-500 text-white shadow-sm"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    {role.replace("_", " ")}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Tenant Switcher & Simulation Sandbox Controls hidden as requested */}
 
       {/* Menu Navigation Scrollable */}
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4">

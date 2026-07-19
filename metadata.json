@@ -1,6 +1,6 @@
 {
-  "name": "WATI Enterprise",
-  "description": "Enterprise-grade SaaS Multi-Tenant WhatsApp Business Platform. Streamline conversational support and bulk broadcasting with visual bot workflows, native flows builder, CRM integrations, and Gemini AI-drafted reply assistance.",
+  "name": "BouuZ AI Platform",
+  "description": "Enterprise-grade SaaS Multi-Tenant WhatsApp Business Platform with BouuZ AI. Streamline conversational support and bulk broadcasting with visual bot workflows, BANT lead qualifications, native flows builder, CRM integrations, and automated dashboards.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

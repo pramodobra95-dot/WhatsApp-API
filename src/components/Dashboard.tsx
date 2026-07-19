@@ -41,6 +41,7 @@ export default function Dashboard({ tenantId }: DashboardProps) {
   const [loading, setLoading] = useState(true);
 
   const fetchDashboardData = () => {
+    if (!tenantId) return;
     setLoading(true);
     fetch(`/api/tenants/${tenantId}/dashboard`)
       .then(res => res.json())
