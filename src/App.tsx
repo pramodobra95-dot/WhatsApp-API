@@ -341,6 +341,7 @@ export default function App() {
             setIsLoggedIn(false);
             setCurrentUser(null);
             setVisitedTabs(["dashboard"]);
+            window.history.pushState(null, "", "/");
           }}
         />
       </div>

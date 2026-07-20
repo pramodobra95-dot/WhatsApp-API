@@ -21,6 +21,7 @@ import {
   Deal,
   TenantMetaConfig
 } from "./src/types";
+import { processMetaWebhook } from "./services/metaWebhook";
 
 // Load environment variables
 dotenv.config();
@@ -154,6 +155,17 @@ const WEBHOOK_LOGS: Array<{ id: string; timestamp: string; type: string; payload
   { id: "web-1", timestamp: "2026-07-14T08:15:00Z", type: "messages_received", payload: `{"object":"whatsapp_business_account","entry":[{"id":"9284241","changes":[{"value":{"messaging_product":"whatsapp","metadata":{"display_phone_number":"+15550199","phone_number_id":"phone-1"},"contacts":[{"profile":{"name":"David Miller"},"wa_id":"14155552671"}],"messages":[{"from":"14155552671","id":"wamid.HBgLMTQxNTU1NTI2NzEVAgARGBI5OUNBMTY0N","timestamp":"1784016900","text":{"body":"I haven't received my tracking link yet, please assist."},"type":"text"}]},"field":"messages"}]}]}`, status: "success" },
   { id: "web-2", timestamp: "2026-07-14T08:10:00Z", type: "message_status_sent", payload: `{"messaging_product":"whatsapp","status":"sent","recipient_id":"14155552671","message_id":"wamid.HBgLMTQxNTU1NTI2NzEVAgA..."}`, status: "success" }
 ];
+
+// Expose the database globally to allow seamless inter-op between Next.js and Express in sandboxed setups
+(global as any).__mock_database = {
+  phoneNumbers: PHONE_NUMBERS,
+  tenants: TENANTS,
+  contacts: CONTACTS,
+  chats: CHATS,
+  messages: MESSAGES,
+  auditLogs: AUDIT_LOGS,
+  webhookLogs: WEBHOOK_LOGS
+};
 
 // --- API ENDPOINTS ---
 
@@ -1575,6 +1587,61 @@ app.post("/api/routing-rules/simulate/:tenantId", async (req, res) => {
     traceSteps,
     chatId
   });
+});
+
+
+// GET - Meta Webhook Verification Handshake for Express Router
+app.get("/api/meta/webhook", (req, res) => {
+  try {
+    const mode = req.query["hub.mode"] as string;
+    const token = req.query["hub.verify_token"] as string;
+    const challenge = req.query["hub.challenge"] as string;
+
+    const systemVerifyToken = process.env.META_VERIFY_TOKEN || "verify_token_default_secure";
+
+    if (mode && token) {
+      if (mode === "subscribe" && token === systemVerifyToken) {
+        console.log("Express: Meta Cloud API webhook handshake validated successfully.");
+        return res.status(200).type("text/plain").send(challenge);
+      } else {
+        console.warn("Express: Meta Webhook verification failed. Tokens mismatched.");
+        return res.status(403).json({ error: "Forbidden: Verification token mismatched." });
+      }
+    }
+    return res.status(400).json({ error: "Bad Request: Mode or Verification token not specified." });
+  } catch (err: any) {
+    console.error("Express: Meta Webhook verification exception:", err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// POST - Received Event Endpoint for Express Router
+app.post("/api/meta/webhook", async (req, res) => {
+  try {
+    const payload = req.body;
+    console.log("Express: Received WhatsApp Cloud API payload event:", JSON.stringify(payload));
+
+    const db = {
+      phoneNumbers: PHONE_NUMBERS,
+      tenants: TENANTS,
+      contacts: CONTACTS,
+      chats: CHATS,
+      messages: MESSAGES,
+      auditLogs: AUDIT_LOGS,
+      webhookLogs: WEBHOOK_LOGS
+    };
+
+    const result = await processMetaWebhook(payload, db);
+
+    if (result.success) {
+      return res.status(200).json({ status: "success", processed: result.processedEvents });
+    } else {
+      return res.status(200).json({ status: "skipped", reason: result.reason });
+    }
+  } catch (err: any) {
+    console.error("Express: Meta Webhook parsing exception:", err);
+    return res.status(500).json({ error: "Failed to parse webhook payload." });
+  }
 });
 
 

@@ -65,36 +65,37 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
 
   const [subPage, setSubPage] = useState<null | "services" | "terms" | "privacy">(null);
 
-  // Synchronize hash in URL with subPage state for Meta API verification compliance
+  // Synchronize pathname in URL with subPage state for Meta API verification compliance
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash === "#services") {
+    const handlePathChange = () => {
+      const path = window.location.pathname;
+      if (path === "/services" || path === "/services/") {
         setSubPage("services");
-      } else if (hash === "#terms") {
+      } else if (path === "/terms" || path === "/terms/") {
         setSubPage("terms");
-      } else if (hash === "#privacy") {
+      } else if (path === "/privacy" || path === "/privacy/") {
         setSubPage("privacy");
-      } else if (!hash || hash === "#" || hash.startsWith("#features") || hash.startsWith("#running-dashboard") || hash.startsWith("#bant") || hash.startsWith("#scheduler")) {
+      } else if (path === "/" || path === "" || path.startsWith("/#") || path.startsWith("/?")) {
         setSubPage(null);
       }
     };
 
-    handleHashChange();
-    window.addEventListener("hashchange", handleHashChange);
+    handlePathChange();
+    window.addEventListener("popstate", handlePathChange);
     return () => {
-      window.removeEventListener("hashchange", handleHashChange);
+      window.removeEventListener("popstate", handlePathChange);
     };
   }, []);
 
   const navigateToSubPage = (page: null | "services" | "terms" | "privacy") => {
     setSubPage(page);
-    if (page) {
-      window.location.hash = page;
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } else {
-      window.location.hash = "";
+    const newPath = page ? `/${page}` : "/";
+    if (window.location.pathname !== newPath) {
+      window.history.pushState(null, "", newPath);
+      // Dispatch standard popstate so other routing listeners (like App) synchronize instantly
+      window.dispatchEvent(new PopStateEvent("popstate"));
     }
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Demo Scheduler State
@@ -492,21 +493,21 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
               Home
             </button>
             <a 
-              href="#services" 
+              href="/services" 
               onClick={(e) => { e.preventDefault(); navigateToSubPage("services"); }}
               className={`hover:text-emerald-400 transition-colors cursor-pointer ${subPage === "services" ? "text-emerald-400 font-bold" : ""}`}
             >
               Services
             </a>
             <a 
-              href="#terms" 
+              href="/terms" 
               onClick={(e) => { e.preventDefault(); navigateToSubPage("terms"); }}
               className={`hover:text-emerald-400 transition-colors cursor-pointer ${subPage === "terms" ? "text-emerald-400 font-bold" : ""}`}
             >
               Terms & Conditions
             </a>
             <a 
-              href="#privacy" 
+              href="/privacy" 
               onClick={(e) => { e.preventDefault(); navigateToSubPage("privacy"); }}
               className={`hover:text-emerald-400 transition-colors cursor-pointer ${subPage === "privacy" ? "text-emerald-400 font-bold" : ""}`}
             >
@@ -1318,7 +1319,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
           </p>
           <div className="flex justify-center gap-6 text-[11px] text-slate-400 mt-2 flex-wrap">
             <a 
-              href="#services" 
+              href="/services" 
               onClick={(e) => { e.preventDefault(); navigateToSubPage("services"); }}
               className="hover:text-emerald-400 transition-colors"
             >
@@ -1326,7 +1327,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             </a>
             <span className="text-slate-800">|</span>
             <a 
-              href="#terms" 
+              href="/terms" 
               onClick={(e) => { e.preventDefault(); navigateToSubPage("terms"); }}
               className="hover:text-emerald-400 transition-colors"
             >
@@ -1334,7 +1335,7 @@ export default function LandingPage({ onLoginSuccess }: LandingPageProps) {
             </a>
             <span className="text-slate-800">|</span>
             <a 
-              href="#privacy" 
+              href="/privacy" 
               onClick={(e) => { e.preventDefault(); navigateToSubPage("privacy"); }}
               className="hover:text-emerald-400 transition-colors"
             >
