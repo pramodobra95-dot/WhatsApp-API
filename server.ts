@@ -20,8 +20,8 @@ import {
   Chatbot, 
   Deal,
   TenantMetaConfig
-} from "./src/types";
-import { processMetaWebhook } from "./services/metaWebhook";
+} from "./src/types.js";
+import { processMetaWebhook } from "./services/metaWebhook.js";
 
 // Load environment variables
 dotenv.config();

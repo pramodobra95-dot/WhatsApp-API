@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Message, Chat, Contact } from "../types/index";
+import { Message, Chat, Contact } from "../types/index.js";
 
 // In-memory databases referenced from the server core state to log incoming messages
 // In a production SQL/NoSQL environment, this delegates directly to Prisma/Drizzle/Mongoose/Supabase.
